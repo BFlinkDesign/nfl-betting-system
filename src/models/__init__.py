@@ -30,6 +30,18 @@ except ImportError:
     AdaptiveConformalPredictor = None
     should_bet_with_conformal = None
 
+try:
+    from .probability_stacking import (
+        ProbabilityStacker, StackedProbability, stack_for_week,
+        odds_to_probability, spread_to_probability
+    )
+except ImportError:
+    ProbabilityStacker = None
+    StackedProbability = None
+    stack_for_week = None
+    odds_to_probability = None
+    spread_to_probability = None
+
 __all__ = [
     "XGBoostNFLModel",
     "ModelCalibrator",
@@ -39,4 +51,9 @@ __all__ = [
     "ConformalPredictor",
     "AdaptiveConformalPredictor",
     "should_bet_with_conformal",
+    "ProbabilityStacker",
+    "StackedProbability",
+    "stack_for_week",
+    "odds_to_probability",
+    "spread_to_probability",
 ]
