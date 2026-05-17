@@ -37,6 +37,7 @@ from backend.routers import (
     props_router,
     parlays_router,
     performance_router,
+    recreational_router,
 )
 from backend.services.data_service import get_data_service
 
@@ -106,6 +107,7 @@ app.include_router(picks_router)
 app.include_router(props_router)
 app.include_router(parlays_router)
 app.include_router(performance_router)
+app.include_router(recreational_router)
 
 
 # ==================== Health Check & Root ====================
