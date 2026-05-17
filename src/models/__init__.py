@@ -5,6 +5,7 @@ Research-backed implementations:
 - ModelCalibrator: Platt scaling with ECE/MCE metrics (Guo et al. 2017)
 - StackedEnsembleModel: Heterogeneous ensemble (Nature Scientific Reports 2025)
 - MCDropoutPredictor: Uncertainty quantification (Gal & Ghahramani 2016)
+- ConformalPredictor: Distribution-free prediction intervals (Shafer & Vovk 2008)
 """
 
 from .calibration import ModelCalibrator
@@ -22,10 +23,20 @@ except ImportError:
     MCDropoutPredictor = None
     calculate_confidence_score = None
 
+try:
+    from .conformal import ConformalPredictor, AdaptiveConformalPredictor, should_bet_with_conformal
+except ImportError:
+    ConformalPredictor = None
+    AdaptiveConformalPredictor = None
+    should_bet_with_conformal = None
+
 __all__ = [
     "XGBoostNFLModel",
     "ModelCalibrator",
     "StackedEnsembleModel",
     "MCDropoutPredictor",
     "calculate_confidence_score",
+    "ConformalPredictor",
+    "AdaptiveConformalPredictor",
+    "should_bet_with_conformal",
 ]
