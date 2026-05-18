@@ -1,0 +1,191 @@
+{
+  "meta": {
+    "source": "REPO-AUDIT.md",
+    "date": "2026-05-17",
+    "branch": "claude/implement-logic-layer-01VgpL6wwzu41UHkXsSDc2wX",
+    "auditor": "claude",
+    "mode": "read-only"
+  },
+  "sources_of_truth": {
+    "tier1_enforced": [
+      {"artifact": ".github/workflows/ci.yml", "status": "exists", "note": "Runs on master/main/develop only, NOT this branch"},
+      {"artifact": ".github/workflows/daily-predictions.yml", "status": "exists"},
+      {"artifact": ".github/workflows/weekly-retrain.yml", "status": "exists"},
+      {"artifact": ".pre-commit-config.yaml", "status": "exists", "note": "Hook NOT installed"},
+      {"artifact": "pre-commit git hook", "status": "missing"}
+    ],
+    "tier2_executable": [
+      {"artifact": "tests/", "count": 12, "status": "ci_enforced"},
+      {"artifact": "scripts/test_*.py", "count": 7, "status": "not_enforced"},
+      {"artifact": "root test_*.py", "count": 4, "status": "not_enforced"}
+    ],
+    "tier3_declarative": [
+      {"artifact": "json_schemas", "status": "none_found"},
+      {"artifact": "openapi_spec", "status": "unknown"},
+      {"artifact": "type_hints", "status": "present", "location": "src/nfl_picks/"},
+      {"artifact": "pyproject.toml", "status": "exists"}
+    ],
+    "tier4_prose": [
+      {"artifact": "markdown_files", "count": 66},
+      {"artifact": "CLAUDE.md", "status": "exists"},
+      {"artifact": "README.md", "status": "exists"}
+    ],
+    "tier5_intent": [
+      {"artifact": "todo_markers", "count": 0},
+      {"artifact": "commit_messages", "status": "present"}
+    ],
+    "highest_authority": "pytest tests/ -m 'not integration and not slow'",
+    "actual_enforcement": "none_on_this_branch"
+  },
+  "run_status": {
+    "can_run": true,
+    "entry_points": [
+      {"name": "cli", "command": "picks --week 1", "status": "ok"},
+      {"name": "server", "command": "picks --serve", "status": "ok"},
+      {"name": "tests", "command": "pytest tests/", "status": "ok"}
+    ],
+    "dependencies": {
+      "pandas": "1.5.3",
+      "numpy": "1.26.4",
+      "scikit-learn": "1.8.0",
+      "fastapi": "0.136.1",
+      "pydantic": "2.13.4",
+      "pydantic-settings": "2.14.1"
+    }
+  },
+  "structure": {
+    "codebases": [
+      {"name": "nfl_picks", "location": "src/nfl_picks/", "status": "active", "tests_pass": 28},
+      {"name": "old_system", "location": "src/ + backend/", "status": "unknown", "tests_pass": "unknown"}
+    ],
+    "cross_imports": false,
+    "dead_code": [
+      "src/nfl_picks/ui/__init__.py",
+      "src/nfl_picks/api/__init__.py",
+      "src/nfl_picks/features/__init__.py",
+      "src/nfl_picks/models/__init__.py"
+    ],
+    "circular_dependencies": false
+  },
+  "verification": {
+    "tests_directory": {
+      "passed": 74,
+      "failed": 0,
+      "skipped": 1,
+      "warnings": 18
+    },
+    "root_tests": {
+      "passed": 0,
+      "errors": 2,
+      "error_details": ["fixture 'module_name' not found", "fixture 'client_class' not found"]
+    },
+    "linters": {
+      "black": "not_installed",
+      "ruff": "not_installed",
+      "mypy": "not_installed"
+    },
+    "untested": [
+      "src/nfl_picks/knowledge.py",
+      "src/nfl_picks/mlops/train.py",
+      "live_server",
+      "old_src_modules",
+      "backend_modules"
+    ]
+  },
+  "conflicts": [
+    {
+      "id": 1,
+      "name": "roi_claims",
+      "sources": [
+        {"file": "README.md", "line": 397, "tier": 4, "claim": "428.04%"},
+        {"file": "CLAUDE.md", "line": 11, "tier": 4, "claim": "false, actually 25.3%"},
+        {"file": "knowledge.py", "line": 17, "tier": 3, "claim": "25.3"}
+      ],
+      "winner": "knowledge.py",
+      "winner_tier": 3,
+      "status": "readme_contains_known_false_claim"
+    },
+    {
+      "id": 2,
+      "name": "install_instructions",
+      "sources": [
+        {"file": "ci.yml", "tier": 1, "instruction": "pip install -r requirements.txt"},
+        {"file": "README.md", "tier": 4, "instruction": "both pip install -e . AND requirements.txt"},
+        {"file": "pyproject.toml", "tier": 3, "instruction": "different dependency set"}
+      ],
+      "winner": "ci.yml",
+      "winner_tier": 1,
+      "status": "conflicting_dependency_sources"
+    },
+    {
+      "id": 3,
+      "name": "test_coverage_claim",
+      "sources": [
+        {"file": "ci.yml", "tier": 1, "claim": "covers src/"},
+        {"file": "actual_tests", "tier": 2, "claim": "only covers src/nfl_picks/"}
+      ],
+      "winner": "ci.yml",
+      "winner_tier": 1,
+      "status": "misleading_coverage_claim"
+    },
+    {
+      "id": 4,
+      "name": "accuracy_claims",
+      "sources": [
+        {"file": "CLAUDE.md", "tier": 4, "values": ["63.1%", "65.7%"]},
+        {"file": "README.md", "tier": 4, "value": "65.6%"},
+        {"file": "knowledge.py", "tier": 3, "value": 65.6},
+        {"file": "predictor.py", "tier": 3, "value": 0.656}
+      ],
+      "winner": "code",
+      "winner_tier": 3,
+      "status": "minor_inconsistency"
+    },
+    {
+      "id": 5,
+      "name": "duplicate_signal_enum",
+      "sources": [
+        {"file": "pick.py", "type": "PickSignal", "values": "strings"},
+        {"file": "knowledge.py", "type": "Signal", "values": "floats"}
+      ],
+      "winner": "none",
+      "status": "duplicate_definitions"
+    }
+  ],
+  "gaps": [
+    {"id": 1, "status": "verified", "description": "README.md line 397 claims 428% ROI; CLAUDE.md says this is false"},
+    {"id": 2, "status": "verified", "description": "CI does not run on feature branches; this branch has no enforcement"},
+    {"id": 3, "status": "verified", "description": "Pre-commit hook config exists but hook is NOT installed"},
+    {"id": 4, "status": "verified", "description": "test_system_simple.py has 2 broken tests (missing fixtures)"},
+    {"id": 5, "status": "verified", "description": "src/nfl_picks/ui/__init__.py is empty (0 bytes) - dead code"},
+    {"id": 6, "status": "verified", "description": "src/nfl_picks/api/__init__.py is empty (0 bytes) - dead code"},
+    {"id": 7, "status": "verified", "description": "src/nfl_picks/features/__init__.py is empty (0 bytes) - dead code"},
+    {"id": 8, "status": "verified", "description": "src/nfl_picks/models/__init__.py is empty (0 bytes) - dead code"},
+    {"id": 9, "status": "verified", "description": "Duplicate Signal enum: pick.py:PickSignal vs knowledge.py:Signal"},
+    {"id": 10, "status": "verified", "description": "CI uses requirements.txt; new package uses pyproject.toml (different deps)"},
+    {"id": 11, "status": "verified", "description": "No test verifies model actually achieves claimed 65.6% accuracy"},
+    {"id": 12, "status": "verified", "description": "No test verifies model actually achieves claimed 25.3% ROI"},
+    {"id": 13, "status": "verified", "description": "scripts/test_*.py files (7 total) not run by CI"},
+    {"id": 14, "status": "verified", "description": "Root test_*.py files (4 total) not run by CI"},
+    {"id": 15, "status": "verified", "description": "knowledge.py constants have no test coverage"},
+    {"id": 16, "status": "verified", "description": "mlops/train.py has no test coverage"},
+    {"id": 17, "status": "verified", "description": "Live server (uvicorn) not tested, only TestClient"},
+    {"id": 18, "status": "inferred", "description": "Old src/ modules (agents, services, orchestrator) have unknown test coverage"},
+    {"id": 19, "status": "inferred", "description": "Old backend/main.py has unknown test coverage"},
+    {"id": 20, "status": "verified", "description": "black, ruff, mypy not installed in this environment"},
+    {"id": 21, "status": "verified", "description": "CLAUDE.md mentions both 63.1% and 65.7% accuracy in different places"},
+    {"id": 22, "status": "verified", "description": "18 warnings during test run (not investigated)"},
+    {"id": 23, "status": "unknown", "description": "No JSON schemas for API request/response validation"},
+    {"id": 24, "status": "unknown", "description": "No OpenAPI spec for server endpoints"},
+    {"id": 25, "status": "verified", "description": "README shows two conflicting install methods"}
+  ],
+  "summary": {
+    "tests_passed": 74,
+    "tests_skipped": 1,
+    "tests_broken": 2,
+    "conflicts_found": 5,
+    "gaps_found": 25,
+    "ci_enforcement": "none_on_this_branch",
+    "recommendation": "Do not merge to master until CI would pass"
+  }
+}
