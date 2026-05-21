@@ -141,9 +141,7 @@ class OrchestratorAgent(BaseAgent):
         """Evaluate a proposal — reject if missing required fields."""
         proposal = message.content.get("proposal", {})
         proposal_type = proposal.get("type", "unknown")
-        logger.info(
-            "Evaluating proposal from %s: %s", message.sender_id, proposal_type
-        )
+        logger.info("Evaluating proposal from %s: %s", message.sender_id, proposal_type)
 
         approved = True
         reason = "Approved"
@@ -183,9 +181,7 @@ class OrchestratorAgent(BaseAgent):
         alert_msg = alert.get("message", "Unknown")
 
         if severity == "critical":
-            logger.critical(
-                "CRITICAL alert from %s: %s", message.sender_id, alert_msg
-            )
+            logger.critical("CRITICAL alert from %s: %s", message.sender_id, alert_msg)
             pause_cmd = AgentMessage(
                 sender_id=self.agent_id,
                 receiver_id=message.sender_id,

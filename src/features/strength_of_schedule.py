@@ -32,7 +32,9 @@ class StrengthOfScheduleFeatures(FeatureBuilder):
         return ["game_id", "gameday", "season", "home_team", "away_team"]
 
     def build(self, df: pd.DataFrame) -> pd.DataFrame:
-        logger.info("Building strength-of-schedule features (window=%d)...", self.window)
+        logger.info(
+            "Building strength-of-schedule features (window=%d)...", self.window
+        )
 
         df = df.copy()
         df["gameday"] = pd.to_datetime(df["gameday"])

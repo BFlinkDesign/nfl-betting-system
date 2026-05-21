@@ -8,7 +8,6 @@ import json
 import logging
 import sqlite3
 import threading
-from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -55,9 +54,11 @@ class EventStore:
                         message_type, priority, parent_id, content)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
-                        message.timestamp.isoformat()
-                        if hasattr(message.timestamp, "isoformat")
-                        else str(message.timestamp),
+                        (
+                            message.timestamp.isoformat()
+                            if hasattr(message.timestamp, "isoformat")
+                            else str(message.timestamp)
+                        ),
                         message.message_id,
                         message.sender_id,
                         message.receiver_id or "",

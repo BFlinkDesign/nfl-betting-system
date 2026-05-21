@@ -121,9 +121,7 @@ class RefereeFeatures(FeatureBuilder):
                 )
                 continue
 
-            past = df[
-                (df["gameday"] < game["gameday"]) & (df["referee"] == referee)
-            ]
+            past = df[(df["gameday"] < game["gameday"]) & (df["referee"] == referee)]
 
             if len(past) > 0:
                 home_win_rate = float((past["result"] > 0).mean())
@@ -135,9 +133,7 @@ class RefereeFeatures(FeatureBuilder):
 
                     home_pen = float(valid["home_penalties"].mean())
                     total_pen = float(valid["total_penalties"].mean())
-                    home_penalty_rate = (
-                        home_pen / total_pen if total_pen > 0 else 0.5
-                    )
+                    home_penalty_rate = home_pen / total_pen if total_pen > 0 else 0.5
                 else:
                     penalty_rate = 0.5
                     home_penalty_rate = 0.5
@@ -157,7 +153,9 @@ class RefereeFeatures(FeatureBuilder):
 
         result = pd.DataFrame(stats_list)
 
-        df.drop(columns=["total_penalties", "home_penalties"], errors="ignore", inplace=True)
+        df.drop(
+            columns=["total_penalties", "home_penalties"], errors="ignore", inplace=True
+        )
 
         return result
 

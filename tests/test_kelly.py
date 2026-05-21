@@ -1,7 +1,5 @@
 """Tests for Kelly criterion bet sizing."""
 
-import pytest
-
 from src.betting.kelly import KellyCriterion
 
 
@@ -32,8 +30,12 @@ class TestKellyCriterion:
         assert large > small
 
     def test_aggressive_multiplier_heavy_favorite(self):
-        conservative = KellyCriterion(aggressive_mode=False, min_probability=0.50, min_edge=0.01)
-        aggressive = KellyCriterion(aggressive_mode=True, min_probability=0.50, min_edge=0.01)
+        conservative = KellyCriterion(
+            aggressive_mode=False, min_probability=0.50, min_edge=0.01
+        )
+        aggressive = KellyCriterion(
+            aggressive_mode=True, min_probability=0.50, min_edge=0.01
+        )
 
         c_bet = conservative.calculate_bet_size(prob_win=0.75, odds=1.5, bankroll=10000)
         a_bet = aggressive.calculate_bet_size(prob_win=0.75, odds=1.5, bankroll=10000)
@@ -52,6 +54,8 @@ class TestKellyCriterion:
         assert bet == 0.0
 
     def test_non_negative(self):
-        kelly = KellyCriterion(min_probability=0.50, min_edge=0.0, aggressive_mode=False)
+        kelly = KellyCriterion(
+            min_probability=0.50, min_edge=0.0, aggressive_mode=False
+        )
         bet = kelly.calculate_bet_size(prob_win=0.51, odds=1.01, bankroll=10000)
         assert bet >= 0.0

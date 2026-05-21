@@ -51,9 +51,7 @@ class TestLeaderLease:
 
     def test_context_manager_failure(self, tmp_path):
         lock_path = tmp_path / ".test_block.lock"
-        lock_path.write_text(
-            json.dumps({"pid": os.getpid(), "heartbeat": time.time()})
-        )
+        lock_path.write_text(json.dumps({"pid": os.getpid(), "heartbeat": time.time()}))
 
         with pytest.raises(RuntimeError, match="Could not acquire"):
             with LeaderLease("test_block", lock_dir=str(tmp_path), ttl_seconds=60):
@@ -75,8 +73,13 @@ class TestJSONFormatter:
     def test_json_output(self):
         formatter = JSONFormatter()
         record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="", lineno=0,
-            msg="hello world", args=(), exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="hello world",
+            args=(),
+            exc_info=None,
         )
         output = formatter.format(record)
         parsed = json.loads(output)

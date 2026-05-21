@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
-from src.agents.base_agent import AgentCapability, BaseAgent
+from src.agents.base_agent import AgentCapability, AgentMessage, BaseAgent
 from src.api.request_orchestrator import Priority, RequestOrchestrator
 
 logger = logging.getLogger(__name__)
@@ -272,7 +272,9 @@ class LoggingAgent(BaseAgent):
 
     async def _get_logs(self, level: str = None, limit: int = 100) -> Dict[str, Any]:
         filtered = (
-            self.logs if not level else [l for l in self.logs if l["level"] == level]
+            self.logs
+            if not level
+            else [entry for entry in self.logs if entry["level"] == level]
         )
         return {"logs": filtered[-limit:], "count": len(filtered)}
 
@@ -295,7 +297,11 @@ class SelfHealingAgent(BaseAgent):
 
     def _ensure_deps(self):
         if self._monitoring is None:
-            from src.self_healing import AnomalyDetector, AutoRemediation, MonitoringLayer
+            from src.self_healing import (
+                AnomalyDetector,
+                AutoRemediation,
+                MonitoringLayer,
+            )
 
             self._monitoring = MonitoringLayer()
             self._anomaly_detector = AnomalyDetector(self._monitoring)
@@ -308,7 +314,9 @@ class SelfHealingAgent(BaseAgent):
                 for issue in issues:
                     result = await self._fix_issue(issue)
                     if not result.get("fixed"):
-                        logger.warning("Self-healing could not fix: %s", issue.get("type"))
+                        logger.warning(
+                            "Self-healing could not fix: %s", issue.get("type")
+                        )
                         await self.send_message_async(
                             AgentMessage(
                                 receiver_id="orchestrator_001",

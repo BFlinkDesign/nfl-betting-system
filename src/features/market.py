@@ -48,7 +48,9 @@ class MarketFeatures(FeatureBuilder):
                 (opening < 0) & (df["line_movement"].fillna(0) > 0.5)
             ).astype(int) | (
                 (opening > 0) & (df["line_movement"].fillna(0) < -0.5)
-            ).astype(int)
+            ).astype(
+                int
+            )
         else:
             df["line_movement_abs"] = 0.0
             df["sharp_indicator"] = 0

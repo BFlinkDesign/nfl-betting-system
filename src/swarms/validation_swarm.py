@@ -173,13 +173,9 @@ class ValidationSwarm(SwarmBase):
 
         discrepancies = []
         if roi_std > 10.0:
-            discrepancies.append(
-                f"ROI spread too wide: std={roi_std:.1f}%"
-            )
+            discrepancies.append(f"ROI spread too wide: std={roi_std:.1f}%")
         if wr_std > 8.0:
-            discrepancies.append(
-                f"Win-rate spread too wide: std={wr_std:.1f}%"
-            )
+            discrepancies.append(f"Win-rate spread too wide: std={wr_std:.1f}%")
 
         return {
             "consistent": len(discrepancies) == 0,

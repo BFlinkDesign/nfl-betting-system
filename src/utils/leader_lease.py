@@ -9,7 +9,6 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +82,9 @@ class LeaderLease:
 
     def _write_lease(self) -> None:
         self._lock_path.write_text(
-            json.dumps({"pid": os.getpid(), "heartbeat": time.time(), "name": self._name})
+            json.dumps(
+                {"pid": os.getpid(), "heartbeat": time.time(), "name": self._name}
+            )
         )
 
     @staticmethod

@@ -55,7 +55,10 @@ class TestBacktestEngine:
         )
         engine = BacktestEngine(config={"min_edge": 0.10, "min_probability": 0.70})
         metrics, _ = engine.run_backtest(df)
-        assert metrics.get("error") == "No bets placed" or metrics.get("total_bets", 0) == 0
+        assert (
+            metrics.get("error") == "No bets placed"
+            or metrics.get("total_bets", 0) == 0
+        )
 
     def test_reset_clears_state(self, sample_predictions):
         engine = BacktestEngine(initial_bankroll=5000)

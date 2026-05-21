@@ -8,7 +8,7 @@ Bounded history, safe concurrent subscription, and duplicate-delivery guard.
 import asyncio
 import logging
 from collections import defaultdict, deque
-from typing import Callable, Deque, Dict, List, Optional, Set
+from typing import Deque, Dict, List, Optional, Set
 
 from src.agents.base_agent import AgentMessage, BaseAgent
 
@@ -75,7 +75,10 @@ class MessageBus:
 
             for msg_type in (message.message_type, "*"):
                 for sub in list(self.subscribers.get(msg_type, [])):
-                    if sub.agent_id != message.sender_id and sub.agent_id not in delivered_to:
+                    if (
+                        sub.agent_id != message.sender_id
+                        and sub.agent_id not in delivered_to
+                    ):
                         sub.receive_message(message)
                         delivered_to.add(sub.agent_id)
 

@@ -351,12 +351,6 @@ class MasterPipeline:
         # Build features for this game
         # This is simplified - in production, would use full FeaturePipeline
         try:
-            from src.features.elo import EloFeatures
-            from src.features.form import FormFeatures
-
-            # Get team Elo ratings
-            elo_features = EloFeatures()
-
             # Try to get features from saved file
             features_path = (
                 PROJECT_ROOT / "data" / "features_2016_2024_improved.parquet"

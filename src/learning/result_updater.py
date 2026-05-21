@@ -6,9 +6,9 @@ in the adaptive learning database.
 
 import logging
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -28,16 +28,14 @@ class ResultUpdater:
 
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
-            rows = conn.execute(
-                """
+            rows = conn.execute("""
                 SELECT prediction_id, game_id, home_team, away_team,
                        pick, bet_type, odds, timestamp
                 FROM predictions
                 WHERE actual_result IS NULL
                 ORDER BY timestamp DESC
                 LIMIT 100
-                """
-            ).fetchall()
+                """).fetchall()
         return [dict(r) for r in rows]
 
     def update_from_scores(

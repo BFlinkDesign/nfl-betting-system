@@ -94,9 +94,7 @@ class AutoRemediation:
         logger.info("Remediating rate limit: token bucket self-recovers")
         return {"remediated": True, "action": "rate_limit_acknowledged"}
 
-    def _remediate_database_connection(
-        self, anomaly: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def _remediate_database_connection(self, anomaly: Dict[str, Any]) -> Dict[str, Any]:
         logger.info("Remediating database connection: testing connectivity")
         db_files = list(Path("data").glob("*.db"))
         ok = True

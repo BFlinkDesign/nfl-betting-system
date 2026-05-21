@@ -5,7 +5,7 @@ Supports single-pass backtesting and Monte Carlo confidence intervals.
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -120,7 +120,6 @@ class BacktestEngine:
 
         rng = np.random.default_rng(seed)
         profits = np.array([h["profit"] for h in self.history])
-        bet_sizes = np.array([h["bet_size"] for h in self.history])
         n_bets = len(profits)
 
         sim_rois = []
