@@ -2,6 +2,7 @@
 NOAA Weather API Client - Free, No Authentication
 
 NOAA provides free weather data without authentication.
+Includes retry with exponential backoff on transient failures.
 """
 
 import logging
@@ -11,6 +12,27 @@ from typing import Dict, Tuple
 import requests
 
 logger = logging.getLogger(__name__)
+
+try:
+    from tenacity import (
+        retry,
+        retry_if_exception_type,
+        stop_after_attempt,
+        wait_exponential,
+    )
+
+    _noaa_retry = retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type(
+            (requests.exceptions.Timeout, requests.exceptions.ConnectionError)
+        ),
+        reraise=True,
+    )
+except ImportError:
+
+    def _noaa_retry(fn):
+        return fn
 
 
 class NOAAClient:
@@ -32,6 +54,7 @@ class NOAAClient:
             }
         )
 
+    @_noaa_retry
     def get_forecast_for_location(self, latitude: float, longitude: float) -> Dict:
         """
         Get weather forecast for stadium location.
@@ -63,6 +86,7 @@ class NOAAClient:
             logger.error(f"NOAA forecast error: {e}")
             return {}
 
+    @_noaa_retry
     def get_hourly_forecast(self, latitude: float, longitude: float) -> Dict:
         """
         Get hourly forecast for stadium location.
@@ -88,6 +112,7 @@ class NOAAClient:
             logger.error(f"NOAA hourly forecast error: {e}")
             return {}
 
+    @_noaa_retry
     def get_current_conditions(self, latitude: float, longitude: float) -> Dict:
         """
         Get current weather conditions from nearest station.

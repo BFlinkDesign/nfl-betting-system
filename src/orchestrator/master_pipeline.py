@@ -246,10 +246,10 @@ class MasterPipeline:
         """Fetch today's games with odds from multiple sources."""
         games = []
 
-        # Get odds from The Odds API
+        # Get odds from The Odds API (blocking I/O off the event loop)
         if self.config.use_live_odds and os.getenv("ODDS_API_KEY"):
             logger.info("Fetching live odds...")
-            odds_data = self.odds_api.get_nfl_odds()
+            odds_data = await asyncio.to_thread(self.odds_api.get_nfl_odds)
 
             for game_odds in odds_data:
                 game = GameData(
@@ -289,7 +289,7 @@ class MasterPipeline:
         # Fallback to ESPN if no odds API
         if not games:
             logger.info("Fetching from ESPN...")
-            scoreboard = self.espn_api.get_scoreboard(2024)
+            scoreboard = await asyncio.to_thread(self.espn_api.get_scoreboard, 2024)
 
             for event in scoreboard.get("events", []):
                 if event.get("status", {}).get("type", {}).get("state") == "pre":
@@ -344,7 +344,7 @@ class MasterPipeline:
 
     async def get_model_prediction(self, game: GameData) -> Dict[str, Any]:
         """Get prediction from the trained ML model."""
-        model = self._load_model()
+        model = await asyncio.to_thread(self._load_model)
         if model is None:
             return {"prob": 0.5, "confidence": 0.0, "model_used": False}
 
@@ -362,7 +362,7 @@ class MasterPipeline:
                 PROJECT_ROOT / "data" / "features_2016_2024_improved.parquet"
             )
             if features_path.exists():
-                df = pd.read_parquet(features_path)
+                df = await asyncio.to_thread(pd.read_parquet, features_path)
 
                 # Get most recent data for these teams
                 home_data = df[df["home_team"] == game.home_team].sort_values(
