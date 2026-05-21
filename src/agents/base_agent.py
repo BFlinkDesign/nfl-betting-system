@@ -2,19 +2,24 @@
 Base Agent Framework
 
 Foundation for all agents in the autonomous system.
+Provides lifecycle management, message routing via the global message bus,
+heartbeat tracking, bounded history, and cooperative shutdown.
 """
 
 import asyncio
 import logging
 import threading
 from abc import ABC, abstractmethod
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Deque, Dict, List, Optional
 from uuid import uuid4
 
 logger = logging.getLogger(__name__)
+
+MAX_MESSAGE_HISTORY = 10_000
 
 
 class AgentStatus(Enum):
@@ -86,21 +91,18 @@ class BaseAgent(ABC):
         self.created_at = datetime.now()
         self.last_heartbeat = datetime.now()
 
-        # Message queue
-        self.message_queue: asyncio.Queue = asyncio.Queue()
-        self.message_history: List[AgentMessage] = []
+        self.message_queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
+        self.message_history: Deque[AgentMessage] = deque(maxlen=MAX_MESSAGE_HISTORY)
 
-        # Tools registry
         self.tools: Dict[str, Callable] = {}
-
-        # Memory/state
         self.memory: Dict[str, Any] = {}
 
-        # Control
         self.running = False
+        self._tasks: List[asyncio.Task] = []
         self.lock = threading.Lock()
+        self.error_count = 0
 
-        logger.info(f"Initialized agent: {agent_name} ({agent_id})")
+        logger.info("Initialized agent: %s (%s)", agent_name, agent_id)
 
     def register_tool(self, name: str, tool: Callable, description: str = ""):
         """
@@ -119,42 +121,65 @@ class BaseAgent(ABC):
         """Get a tool by name."""
         return self.tools.get(name)
 
-    def send_message(self, message: AgentMessage):
-        """
-        Send message to another agent (via message bus).
+    async def send_message_async(self, message: AgentMessage):
+        """Send message via the global message bus (async)."""
+        from src.agents.message_bus import message_bus
 
-        Args:
-            message: Message to send
-        """
         message.sender_id = self.agent_id
-        # In real implementation, this would go through message bus
-        logger.debug(
-            f"Agent {self.agent_id} sending message {message.message_id} to {message.receiver_id}"
-        )
+        await message_bus.send(message)
+
+    def send_message(self, message: AgentMessage):
+        """Send message — schedules async delivery on the running loop."""
+        from src.agents.message_bus import message_bus
+
+        message.sender_id = self.agent_id
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(message_bus.send(message))
+        except RuntimeError:
+            logger.warning(
+                "No running event loop; message %s not delivered", message.message_id
+            )
 
     def receive_message(self, message: AgentMessage):
-        """
-        Receive a message.
-
-        Args:
-            message: Received message
-        """
-        self.message_queue.put_nowait(message)
+        """Enqueue an inbound message for processing."""
+        try:
+            self.message_queue.put_nowait(message)
+        except asyncio.QueueFull:
+            logger.warning(
+                "Agent %s queue full — dropping message %s",
+                self.agent_id,
+                message.message_id,
+            )
+            return
         self.message_history.append(message)
-        logger.debug(
-            f"Agent {self.agent_id} received message {message.message_id} from {message.sender_id}"
-        )
 
     async def process_messages(self):
-        """Process messages from queue."""
+        """Process messages from queue until stopped."""
         while self.running:
             try:
                 message = await asyncio.wait_for(self.message_queue.get(), timeout=1.0)
-                await self.handle_message(message)
+                await asyncio.wait_for(self.handle_message(message), timeout=30.0)
+                self.update_heartbeat()
             except asyncio.TimeoutError:
                 continue
+            except asyncio.CancelledError:
+                break
             except Exception as e:
-                logger.error(f"Error processing message: {e}")
+                self.error_count += 1
+                logger.error(
+                    "Agent %s message processing error (#%d): %s",
+                    self.agent_id,
+                    self.error_count,
+                    e,
+                    exc_info=True,
+                )
+                if self.error_count >= 10:
+                    self.status = AgentStatus.ERROR
+                    logger.critical(
+                        "Agent %s exceeded error threshold, entering ERROR state",
+                        self.agent_id,
+                    )
 
     async def handle_message(self, message: AgentMessage):
         """
@@ -204,30 +229,46 @@ class BaseAgent(ABC):
         pass
 
     async def start(self):
-        """Start the agent."""
+        """Start the agent and its message processing task."""
         if self.running:
             return
 
         self.status = AgentStatus.READY
         self.running = True
+        self.error_count = 0
 
-        logger.info(f"Starting agent: {self.agent_name}")
+        logger.info("Starting agent: %s", self.agent_name)
 
-        # Start message processing
-        asyncio.create_task(self.process_messages())
+        task = asyncio.create_task(
+            self.process_messages(), name=f"{self.agent_id}_messages"
+        )
+        self._tasks.append(task)
 
-        # Start main loop
         self.status = AgentStatus.RUNNING
-        await self.run()
+        try:
+            await self.run()
+        except asyncio.CancelledError:
+            logger.info("Agent %s run() cancelled", self.agent_id)
+        except Exception as e:
+            self.status = AgentStatus.ERROR
+            logger.error("Agent %s run() failed: %s", self.agent_id, e, exc_info=True)
 
     async def stop(self):
-        """Stop the agent."""
+        """Stop the agent and cancel all background tasks."""
         if not self.running:
             return
 
-        logger.info(f"Stopping agent: {self.agent_name}")
+        logger.info("Stopping agent: %s", self.agent_name)
         self.running = False
+
+        for task in self._tasks:
+            task.cancel()
+        if self._tasks:
+            await asyncio.gather(*self._tasks, return_exceptions=True)
+        self._tasks.clear()
+
         self.status = AgentStatus.SHUTDOWN
+        logger.info("Agent %s stopped", self.agent_id)
 
     def get_status(self) -> Dict[str, Any]:
         """Get agent status."""
@@ -254,10 +295,15 @@ class AgentRegistry:
         self.lock = threading.Lock()
 
     def register(self, agent: BaseAgent):
-        """Register an agent."""
+        """Register an agent. Raises ValueError on duplicate ID."""
         with self.lock:
+            if agent.agent_id in self.agents:
+                raise ValueError(
+                    f"Agent ID {agent.agent_id} already registered "
+                    f"({self.agents[agent.agent_id].agent_name})"
+                )
             self.agents[agent.agent_id] = agent
-            logger.info(f"Registered agent: {agent.agent_name} ({agent.agent_id})")
+            logger.info("Registered agent: %s (%s)", agent.agent_name, agent.agent_id)
 
     def get(self, agent_id: str) -> Optional[BaseAgent]:
         """Get agent by ID."""
