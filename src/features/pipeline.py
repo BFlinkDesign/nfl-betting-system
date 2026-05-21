@@ -21,8 +21,10 @@ try:
     from .form import FormFeatures
     from .injury import InjuryFeatures
     from .line import LineFeatures
+    from .market import MarketFeatures
     from .referee import RefereeFeatures
     from .rest_days import RestDaysFeatures
+    from .strength_of_schedule import StrengthOfScheduleFeatures
     from .weather import WeatherFeatures
 except ImportError:
     from src.features.base import FeatureBuilder
@@ -204,7 +206,9 @@ def create_features(
     pipeline.add_builder(WeatherFeatures())
     pipeline.add_builder(FormFeatures())
     pipeline.add_builder(CategoricalEncodingFeatures())
-    pipeline.add_builder(RefereeFeatures())
+    pipeline.add_builder(RefereeFeatures(pbp_data=pbp))
+    pipeline.add_builder(StrengthOfScheduleFeatures())
+    pipeline.add_builder(MarketFeatures())
 
     if pbp is not None:
         pipeline.add_builder(EPAFeatures(pbp_data=pbp))

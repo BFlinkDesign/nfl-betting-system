@@ -33,3 +33,7 @@ Line length is standardized to **88** (matching Black's default) across `pyproje
 - `ModelCalibrator` uses sklearn's `CalibratedClassifierCV` — the `cv="prefit"` parameter was removed in sklearn 1.8; the implementation handles this automatically.
 - `BacktestEngine.run_monte_carlo()` provides bootstrap confidence intervals; the validation swarm's `_stress_testing` uses this for strategy approval.
 - Two env file conventions coexist: `settings.py`/`secrets.py` load root `.env`, while dashboard/scripts load `config/api_keys.env`. Prefer root `.env` for new code.
+- Historical docs (audit reports, session logs, completion certificates) live in `docs/archive/`. The 17 root markdown files are all actively maintained.
+- `agents/` at repo root is the **legacy** API client layer (TheOddsAPI, ESPN, etc.). `src/agents/` is the structured agent framework (orchestrator, LLM council, etc.). Do not confuse them.
+- Root-level test/validate scripts have been relocated to `scripts/` (e.g., `scripts/validate_system.py`, `scripts/test_api_keys.py`).
+- Feature pipeline (`src/features/pipeline.py`) registers builders including `StrengthOfScheduleFeatures`, `MarketFeatures`, and PBP-aware `RefereeFeatures`.

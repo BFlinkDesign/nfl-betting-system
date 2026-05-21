@@ -578,9 +578,7 @@ python scripts/self_improving_system.py
 
 | Document | Description |
 |----------|-------------|
-| [FINAL_IMPLEMENTATION_REPORT.md](FINAL_IMPLEMENTATION_REPORT.md) | Complete validation results |
-| [PHASE_COMPLETION_REPORT.md](PHASE_COMPLETION_REPORT.md) | Phase-by-phase progress |
-| [MODEL_EVOLUTION_75PCT_SUMMARY.md](MODEL_EVOLUTION_75PCT_SUMMARY.md) | Model improvement journey |
+| [docs/archive/](docs/archive/) | Historical implementation reports and analysis |
 
 ---
 

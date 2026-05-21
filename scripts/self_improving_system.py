@@ -15,7 +15,7 @@ import pandas as pd
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from scripts.download_data import download_all_data
+from scripts.download_data import main as download_all_data
 from scripts.performance_tracker import PerformanceTracker
 from src.features.pipeline import create_features
 
