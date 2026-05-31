@@ -139,8 +139,7 @@ class OddsCache:
         cursor = conn.cursor()
 
         # Main odds snapshots table
-        cursor.execute(
-            """
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS odds_snapshots (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 fetch_timestamp DATETIME NOT NULL,
@@ -159,27 +158,21 @@ class OddsCache:
                 under_odds REAL,
                 raw_data TEXT
             )
-        """
-        )
+        """)
 
         # Indexes for fast queries
-        cursor.execute(
-            """
+        cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_game_time 
             ON odds_snapshots(game_id, fetch_timestamp)
-        """
-        )
+        """)
 
-        cursor.execute(
-            """
+        cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_commence 
             ON odds_snapshots(commence_time)
-        """
-        )
+        """)
 
         # API usage tracking table
-        cursor.execute(
-            """
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS api_usage (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp DATETIME NOT NULL,
@@ -188,8 +181,7 @@ class OddsCache:
                 games_count INTEGER,
                 calls_remaining INTEGER
             )
-        """
-        )
+        """)
 
         conn.commit()
         conn.close()

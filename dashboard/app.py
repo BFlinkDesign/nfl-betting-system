@@ -2296,15 +2296,13 @@ with tab_strategy:
 
     # Debug info (collapsible)
     with st.expander("🔧 Debug Info", expanded=False):
-        st.code(
-            f"""
+        st.code(f"""
 Registry Path: {registry.registry_path.absolute()}
 Total Strategies: {len(registry.strategies)}
 Pending: {len(registry.get_pending_strategies())}
 Accepted: {len(registry.get_accepted_strategies())}
 Rejected: {len(registry.get_rejected_strategies())}
-        """
-        )
+        """)
         if st.button("🔄 Force Reload Registry"):
             st.rerun()
 

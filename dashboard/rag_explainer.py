@@ -265,15 +265,13 @@ def show_why_this_bet(bet_info: Dict, feature_importance: Dict[str, float]):
     st.plotly_chart(fig, width="stretch")
 
     # Simple explanation of the chart
-    st.caption(
-        """
+    st.caption("""
     **How to read this chart:**
     - 🟢 Green bars = Things helping our bet (good!)
     - 🔴 Red bars = Things hurting our bet (careful!)
     - Taller bars = More important
     - Want mostly green and tall? That's a great bet!
-    """
-    )
+    """)
 
 
 # =============================================================================
@@ -434,16 +432,14 @@ def show_rag_qa_widget():
 
     # Example questions
     with st.expander("📖 Example Questions", expanded=False):
-        st.markdown(
-            """
+        st.markdown("""
         **Try asking:**
         - "How much should I bet?"
         - "What's a good win rate?"
         - "What is value betting?"
         - "How do I manage my bankroll?"
         - "How often will I win?"
-        """
-        )
+        """)
 
 
 # =============================================================================

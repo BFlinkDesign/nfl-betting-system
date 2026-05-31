@@ -138,13 +138,11 @@ def export_history(cache: OddsCache, output_file: str = "odds_history_export.jso
 
     print(f"Exporting {count} odds snapshots...")
 
-    cursor.execute(
-        """
+    cursor.execute("""
         SELECT * FROM odds_snapshots 
         ORDER BY fetch_timestamp DESC 
         LIMIT 10000
-    """
-    )
+    """)
 
     rows = [dict(row) for row in cursor.fetchall()]
     conn.close()

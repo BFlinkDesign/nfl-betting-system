@@ -328,8 +328,7 @@ def show_simple_ai_setup():
 
     # Summary
     st.markdown("### 🎯 Recommendation for Beginners:")
-    st.info(
-        """
+    st.info("""
     **Get these 3 (all FREE!):**
     
     1. **Gemini** 🔵 - Easiest (just use your Gmail!)
@@ -339,8 +338,7 @@ def show_simple_ai_setup():
     **Time needed:** 5 minutes total
     
     **Cost:** $0 (completely free!)
-    """
-    )
+    """)
 
     # Next steps
     if st.button("✅ I've Signed Up - Let's Connect Them!", type="primary"):
@@ -371,8 +369,7 @@ def show_ai_status_simple():
         connected_ais.append("Gemini")
 
     if not connected_ais:
-        st.warning(
-            """
+        st.warning("""
         ⚠️ **No AI helpers connected yet!**
         
         **What this means:**
@@ -381,24 +378,21 @@ def show_ai_status_simple():
         **What to do:**
         Click the button below to set up your free AI accounts!
         (Takes 5 minutes, costs $0)
-        """
-        )
+        """)
 
         if st.button("🚀 Set Up AI Helpers (FREE!)", type="primary"):
             st.session_state["show_ai_setup"] = True
             st.rerun()
 
     else:
-        st.success(
-            f"""
+        st.success(f"""
         ✅ **{len(connected_ais)} AI helpers ready!**
         
         Connected: {', '.join(connected_ais)}
         
         **What this means:**
         Your bets will have smart AI analysis!
-        """
-        )
+        """)
 
         # Show simple status for each
         cols = st.columns(len(connected_ais))
@@ -449,14 +443,12 @@ def show_eli10_helper():
     )
 
     if custom_q and st.button("Get Simple Answer"):
-        st.info(
-            """
+        st.info("""
         🤖 **AI Simple Explainer:**
         
         I'll answer this in the simplest way possible!
         (This feature uses your connected AI accounts)
-        """
-        )
+        """)
 
         # TODO: Call AI with "explain like I'm 10" prompt
         st.write("Feature coming in next update!")

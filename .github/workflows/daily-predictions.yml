@@ -6,65 +6,77 @@ on:
     - cron: '0 14 * * *'
   workflow_dispatch:  # Allow manual trigger
 
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-predictions
+  cancel-in-progress: false
+
 jobs:
   generate-predictions:
     name: Generate Daily NFL Predictions
     runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
-        cache: 'pip'
-    
-    - name: Install dependencies
-      run: |
-        pip install -r requirements.txt
-    
-    - name: Download latest data
-      env:
-        ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-      run: |
-        python scripts/download_data.py --seasons 2024 --no-pbp
-    
-    - name: Generate predictions
-      env:
-        ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-        XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
-        PYTHONPATH: ${{ github.workspace }}
-      run: |
-        python scripts/production_daily_pipeline.py
-    
-    - name: Upload predictions artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: daily-predictions-${{ github.run_number }}
-        path: reports/daily_predictions_*.json
-        retention-days: 30
-    
-    - name: Send notifications
-      if: success()
-      env:
-        EMAIL_USER: ${{ secrets.EMAIL_USER }}
-        EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-        EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
-        TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
-        TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
-        TWILIO_PHONE_FROM: ${{ secrets.TWILIO_PHONE_FROM }}
-        TWILIO_PHONE_TO: ${{ secrets.TWILIO_PHONE_TO }}
-      run: |
-        python scripts/send_bet_notifications.py
-      continue-on-error: true
-    
-    - name: Notify on failure
-      if: failure()
-      uses: 8398a7/action-slack@v3
-      with:
-        status: ${{ job.status }}
-        text: 'Daily predictions pipeline failed!'
-        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
-      continue-on-error: true
+    permissions:
+      contents: read
 
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b  # v5.3.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Download latest data
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/download_data.py --seasons 2024 --no-pbp
+
+      - name: Generate predictions
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/production_daily_pipeline.py
+
+      - name: Upload predictions artifact
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882  # v4.4.3
+        with:
+          name: daily-predictions-${{ github.run_number }}
+          path: reports/daily_predictions_*.json
+          retention-days: 30
+
+      - name: Send notifications
+        if: success()
+        env:
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_PHONE_FROM: ${{ secrets.TWILIO_PHONE_FROM }}
+          TWILIO_PHONE_TO: ${{ secrets.TWILIO_PHONE_TO }}
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/send_bet_notifications.py
+        continue-on-error: true
+
+      - name: Notify on failure
+        if: failure()
+        uses: 8398a7/action-slack@1750b5085f3ec60384090fb7c52965ef822e869e  # v3.18.0
+        with:
+          status: ${{ job.status }}
+          text: 'Daily predictions pipeline failed!'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+        continue-on-error: true

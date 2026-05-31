@@ -47,15 +47,13 @@ def advanced_settings_panel():
 
     with tab1:
         st.subheader("🤖 Bulldog AI System")
-        st.info(
-            """
+        st.info("""
         Bulldog is the self-improving AI that automatically:
         - Discovers new betting edges
         - Tests strategies in simulation
         - Evolves features
         - Optimizes performance
-        """
-        )
+        """)
 
         col1, col2 = st.columns(2)
 
@@ -497,14 +495,12 @@ def advanced_settings_panel():
                 with st.spinner("Running genetic programming..."):
                     st.info("🔬 Discovering novel features...")
                     st.success("✅ Found 3 new promising features!")
-                    st.code(
-                        """
+                    st.code("""
 New Features Discovered:
 1. elo_home * (rest_days_away / 7) - Importance: 0.087
 2. log(qb_rating_home) - referee_penalty_rate - Importance: 0.065
 3. sqrt(total_line) / wind_speed - Importance: 0.053
-                    """
-                    )
+                    """)
 
         with col2:
             if st.button("📊 Correlation Analysis", width="stretch"):
@@ -644,14 +640,12 @@ New Features Discovered:
         st.caption("Manage external service credentials")
 
         if st.button("🔑 View API Keys", width="stretch"):
-            st.code(
-                """
+            st.code("""
 ODDS_API_KEY: ****6a4 (Valid)
 XAI_API_KEY: ****vuK (Valid)
 GOOGLE_CLIENT_ID: Not configured
 APPLE_CLIENT_ID: Not configured
-            """
-            )
+            """)
 
         st.divider()
 

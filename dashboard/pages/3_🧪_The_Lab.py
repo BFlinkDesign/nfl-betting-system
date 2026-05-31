@@ -808,7 +808,8 @@ with tab_models:
 # =============================================================================
 with tab_train:
     st.markdown(
-        '<div class="lab-section-header">🏋️ MODEL TRAINING</div>', unsafe_allow_html=True
+        '<div class="lab-section-header">🏋️ MODEL TRAINING</div>',
+        unsafe_allow_html=True,
     )
 
     col_train_config, col_train_status = st.columns([1, 1])
@@ -871,15 +872,13 @@ with tab_train:
             st.info(
                 "⚠️ Training integration requires full backend setup. Use the scripts/train_*.py scripts for now."
             )
-            st.code(
-                f"""
+            st.code(f"""
 # To train a new model, run from project root:
 python scripts/train_xgboost.py --seasons {','.join(map(str, train_seasons))}
 
 # Or use the Makefile:
 make train-xgboost
-            """
-            )
+            """)
 
     with col_train_status:
         st.markdown("#### Training Status")

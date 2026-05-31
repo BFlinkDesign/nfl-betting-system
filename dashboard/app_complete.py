@@ -680,15 +680,13 @@ def show_bankroll_page(user):
     }
 
     info = profile_info[profile]
-    st.info(
-        f"""
+    st.info(f"""
     **{info['desc']}**
     
     - Bet Range: {info['bet_range']}
     - Target ROI: {info['target_roi']}
     - Risk of Ruin: {info['risk_of_ruin']}
-    """
-    )
+    """)
 
 
 def show_settings_page(user):

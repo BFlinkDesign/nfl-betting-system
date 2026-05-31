@@ -183,7 +183,9 @@ def render_strategy_card(
 
         # Delete button (dangerous!)
         with col4:
-            if st.button("🗑️ Delete", key=f"{key_prefix}_delete_{strategy.strategy_id}"):
+            if st.button(
+                "🗑️ Delete", key=f"{key_prefix}_delete_{strategy.strategy_id}"
+            ):
                 # Confirm deletion
                 st.session_state[f"confirm_delete_{strategy.strategy_id}"] = True
 
