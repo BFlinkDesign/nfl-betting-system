@@ -42,6 +42,7 @@ data/
 !pytest.ini
 !.vscode/settings.json
 !.secrets.baseline
+!.claude/settings.json
 
 # Models
 models/

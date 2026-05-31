@@ -78,7 +78,8 @@ def init_db():
     cursor = conn.cursor()
 
     # Users table
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT UNIQUE NOT NULL,
@@ -94,10 +95,12 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_login TIMESTAMP
         )
-    """)
+    """
+    )
 
     # User settings
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS user_settings (
             user_id INTEGER PRIMARY KEY,
             bankroll REAL DEFAULT 500,
@@ -109,7 +112,8 @@ def init_db():
             auto_retrain INTEGER DEFAULT 0,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
-    """)
+    """
+    )
 
     conn.commit()
     conn.close()

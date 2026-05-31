@@ -128,7 +128,8 @@ class AdaptiveEngine:
             cursor = conn.cursor()
 
             # Predictions table
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS predictions (
                     prediction_id TEXT PRIMARY KEY,
                     game_id TEXT,
@@ -152,10 +153,12 @@ class AdaptiveEngine:
                     what_went_wrong TEXT,
                     what_went_right TEXT
                 )
-            """)
+            """
+            )
 
             # Lessons learned table
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS lessons (
                     lesson_id TEXT PRIMARY KEY,
                     timestamp TEXT,
@@ -165,10 +168,12 @@ class AdaptiveEngine:
                     action_taken TEXT,
                     impact REAL
                 )
-            """)
+            """
+            )
 
             # Adjustments table
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS adjustments (
                     adjustment_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     timestamp TEXT,
@@ -179,10 +184,12 @@ class AdaptiveEngine:
                     performance_before REAL,
                     performance_after REAL
                 )
-            """)
+            """
+            )
 
             # Model performance table
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS model_performance (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     timestamp TEXT,
@@ -193,7 +200,8 @@ class AdaptiveEngine:
                     roi REAL,
                     sharpe_ratio REAL
                 )
-            """)
+            """
+            )
 
             conn.commit()
 
@@ -596,7 +604,9 @@ class AdaptiveEngine:
                 else (
                     "🟡"
                     if segment.recommendation == "maintain"
-                    else "🔴" if segment.recommendation == "stop" else "⚪"
+                    else "🔴"
+                    if segment.recommendation == "stop"
+                    else "⚪"
                 )
             )
 

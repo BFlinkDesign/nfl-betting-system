@@ -147,9 +147,9 @@ class LineMovementTracker:
                 change = new_spreads[team] - old_spreads[team]
                 if abs(change) >= 1.0:  # Significant movement
                     movement["significant"] = True
-                    movement["spread_change"] = (
-                        f"{team}: {old_spreads[team]} → {new_spreads[team]} ({change:+.1f})"
-                    )
+                    movement[
+                        "spread_change"
+                    ] = f"{team}: {old_spreads[team]} → {new_spreads[team]} ({change:+.1f})"
 
         # Check total movement
         if old_lines.get("total") and new_lines.get("total"):
@@ -160,9 +160,9 @@ class LineMovementTracker:
                 change = new_total - old_total
                 if abs(change) >= 1.0:  # Significant movement
                     movement["significant"] = True
-                    movement["total_change"] = (
-                        f"{old_total} → {new_total} ({change:+.1f})"
-                    )
+                    movement[
+                        "total_change"
+                    ] = f"{old_total} → {new_total} ({change:+.1f})"
 
         # Sharp money indicator: Line moves against public betting
         # (This would require public betting % data, simplified here)

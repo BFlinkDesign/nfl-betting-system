@@ -201,9 +201,9 @@ def render_strategy_card(
                     success, message = registry.delete_strategy(strategy.strategy_id)
                     if success:
                         st.success(message)
-                        st.session_state[f"confirm_delete_{strategy.strategy_id}"] = (
-                            False
-                        )
+                        st.session_state[
+                            f"confirm_delete_{strategy.strategy_id}"
+                        ] = False
                         st.rerun()
                     else:
                         st.error(message)

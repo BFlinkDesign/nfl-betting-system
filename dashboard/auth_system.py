@@ -56,7 +56,8 @@ def init_auth_db():
     cursor = conn.cursor()
 
     # Users table
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT UNIQUE NOT NULL,
@@ -74,10 +75,12 @@ def init_auth_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_login TIMESTAMP
         )
-    """)
+    """
+    )
 
     # User settings
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS user_settings (
             user_id INTEGER PRIMARY KEY,
             bankroll REAL DEFAULT 500,
@@ -88,10 +91,12 @@ def init_auth_db():
             theme TEXT DEFAULT 'light',
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
-    """)
+    """
+    )
 
     # Tracked bets
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS tracked_bets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -107,7 +112,8 @@ def init_auth_db():
             settled_at TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
-    """)
+    """
+    )
 
     # Create admin account if doesn't exist
     try:
@@ -327,7 +333,8 @@ def send_reset_email(email, token):
     # In production, use SMTP to send actual email
     reset_link = f"http://localhost:8501/?reset_token={token}"
 
-    st.info(f"""
+    st.info(
+        f"""
     📧 **Password Reset Email Sent!**
     
     (In production, this would be sent to: {email})
@@ -338,7 +345,8 @@ def send_reset_email(email, token):
     ```
     
     Copy this link and paste it in your browser to reset your password.
-    """)
+    """
+    )
 
     return True
 

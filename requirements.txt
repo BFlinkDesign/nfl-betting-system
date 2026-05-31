@@ -17,15 +17,10 @@ uvicorn>=0.23.0
 requests>=2.31.0
 requests-cache>=1.1.0
 
-# Testing
-pytest>=7.4.0
-pytest-cov>=4.1.0
-pytest-mock>=3.11.0
-
-# Code Quality
-black>=23.7.0
-ruff>=0.0.280
-mypy>=1.4.0
+# Testing & Code Quality
+# Dev/CI tools (pytest, black, ruff, isort, mypy, bandit, ...) are pinned in
+# requirements-dev.txt so local, pre-commit and CI runs stay reproducible.
+# Install with: pip install -r requirements-dev.txt
 
 # Utilities
 python-dotenv>=1.0.0

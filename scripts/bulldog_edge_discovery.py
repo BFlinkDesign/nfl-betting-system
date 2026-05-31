@@ -179,17 +179,17 @@ class BulldogEdgeDiscovery:
                     success, message = self.registry.add_strategy(
                         strategy, skip_duplicate_check=True
                     )
-                    edge["registry_status"] = (
-                        f"UPGRADED (v{similar.version} -> v{similar.version + 1})"
-                    )
+                    edge[
+                        "registry_status"
+                    ] = f"UPGRADED (v{similar.version} -> v{similar.version + 1})"
                     edge["is_new"] = success
                     if success:
                         self.new_strategies_count += 1
                 else:
                     # Existing strategy is BETTER or EQUAL - skip
-                    edge["registry_status"] = (
-                        f"SKIPPED (existing {similar.name} has ROI {old_roi:.1f}% >= {new_roi:.1f}%)"
-                    )
+                    edge[
+                        "registry_status"
+                    ] = f"SKIPPED (existing {similar.name} has ROI {old_roi:.1f}% >= {new_roi:.1f}%)"
                     edge["is_new"] = False
                     self.duplicate_strategies_count += 1
             else:
