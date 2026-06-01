@@ -2,9 +2,14 @@
 
 **Scope:** `src/` (agents, api, audit, backtesting, betting, config, features, health, learning, notifications, orchestrator, self_healing, strategy_registry.py, swarms, utils, visualization), `scripts/`, `agents/`, `dashboard/`.
 **Date:** 2026-05-31
-**Method:** Static, read-only inspection. No source was modified. Every `file:line` below was read directly and verified against file contents. Claims that could not be confirmed are explicitly marked **Unable to verify**.
+**Method:** Static, read-only inspection. No source was modified. Every `file:line` below was read directly and verified against file contents. Anything that could not be confirmed is explicitly marked **Unable to verify**.
 
-> Scope note: `src/strategy_registry.py` is a single 675-line module (not a package). `src/orchestrator/` contains only `master_pipeline.py` (there is no `main_orchestrator.py`). `src/swarms/swarm_base.py` is a 159-line module whose `SwarmBase` is not an `ABC`. Across the entire scope there are **zero** `isinstance` checks and **zero** `NotImplementedError` raises, which meaningfully limits the Liskov surface (see the L section).
+> Scope facts established during the review:
+> - `src/strategy_registry.py` is a single 675-line module (not a package), and its `StrategyRegistry` is a clean, well-factored class — the quality bar for the rest of the codebase.
+> - `src/orchestrator/` contains only `master_pipeline.py`; there is no `main_orchestrator.py`.
+> - `src/swarms/swarm_base.py` (159 lines) defines `SwarmBase` (a plain class, not an `ABC`) with a consensus contract. `ConsensusSwarm`, `ValidationSwarm`, and `StrategyGenerationSwarm` **do** subclass it; `PredictionPipeline` does not.
+> - `agents/api_integrations.py` is already split into one class per provider (`TheOddsAPI`, `ESPNAPI`, `NFLVerseAPI`, `NOAAWeatherAPI`, `RedditAPI`) — good separation; not flagged.
+> - Across the whole scope there are no `isinstance`-based type dispatches that act as polymorphism substitutes (the `isinstance` calls present are all defensive type-guards), and the only `NotImplementedError` raises are the stub handlers in `src/api/request_orchestrator.py`.
 
 ---
 
@@ -12,153 +17,142 @@
 
 | Principle | Findings | Importance (max) | Worst offenders |
 |-----------|---------:|:----------------:|-----------------|
-| **S** — Single Responsibility | 3 | 9/10 | `dashboard/app.py` (DB + HTTP + AI + presentation in one module), `src/orchestrator/master_pipeline.py` (`MasterPipeline`), `agents/api_integrations.py` (`APIIntegrations`) |
-| **O** — Open/Closed | 3 | 7/10 | `dashboard/app.py:596` (`get_ai_analysis` provider chain), `src/orchestrator/master_pipeline.py:310` (channel chain), `agents/api_integrations.py` (per-API methods) |
-| **L** — Liskov Substitution | 1 | 3/10 | `src/swarms/swarm_base.py` (`SwarmBase` — unused base, no real subclass contract) |
-| **I** — Interface Segregation | 1 | 4/10 | `src/agents/base_agent.py` (`BaseAgent` lifecycle-only base — mostly OK; minor) |
-| **D** — Dependency Inversion | 3 | 9/10 | `src/orchestrator/master_pipeline.py` (concrete imports + sqlite3 inside every stage), `dashboard/app.py:233` (hardcoded sqlite3), `src/notifications/email_sender.py:21-27` (env-coupled SMTP) |
+| **S** — Single Responsibility | 3 | 8/10 | `dashboard/app.py` (data load + AI HTTP + secrets + presentation), `src/orchestrator/master_pipeline.py` (`MasterPipeline`) |
+| **O** — Open/Closed | 2 | 7/10 | `src/api/request_orchestrator.py:227-345` (two-level endpoint `if/elif`), `dashboard/app.py:607` (`provider` chain) |
+| **L** — Liskov Substitution | 1 | 4/10 | `src/swarms/swarm_base.py` (`SwarmBase`/`PredictionPipeline` split — weak-form smell only) |
+| **I** — Interface Segregation | 1 | 3/10 | `src/agents/base_agent.py:58` (`BaseAgent` — minor over-provisioning) |
+| **D** — Dependency Inversion | 3 | 9/10 | `src/orchestrator/master_pipeline.py:151-221` (concrete deps via lazy properties), `dashboard/app.py:607` (inline LLM client), `src/notifications/*` consumers |
 
-**Positive note:** `StrategyRegistry` in `src/strategy_registry.py:197` is a clean, single-purpose, well-factored class (load/save/add/update/query with injectable `registry_path`). It is the quality bar the rest of the codebase should meet.
+**Verified non-issue:** I initially suspected `ConsensusSwarm` skipped its base initializer. It does **not** — `ConsensusSwarm.__init__` (`consensus_swarm.py:22`) correctly calls `super().__init__(... consensus_rule=ConsensusRule.WEIGHTED)` at line 35, exactly like `ValidationSwarm` (`:26`) and `StrategyGenerationSwarm` (`:22`). All three SwarmBase subclasses honor the base contract; `StrategyGenerationSwarm` and `ValidationSwarm` actually call the inherited `make_decision` (`:83` / `:68`). No Liskov violation there.
 
 ---
 
 ## S — Single Responsibility
 
-### S1. `dashboard/app.py` mixes persistence, HTTP, AI calls, business logic and presentation — **9/10**
-**Location:** `dashboard/app.py` (2492 lines; module-level functions + one large UI helper set).
-**Problem:** A single Streamlit module owns every layer:
-- **Persistence:** `load_games()` opens `sqlite3.connect("data/nfl.db")` directly with a hardcoded path and inline SQL (lines 230–240).
-- **External AI HTTP:** `_get_grok_analysis` (622) posts to `api.x.ai`, `_get_claude_analysis` (680), `_get_openai_analysis` (730) — provider SDK/HTTP logic lives inside the dashboard.
-- **Secrets:** `get_secret()` (97) reads `st.secrets`/`os.getenv`.
-- **Presentation:** ~25 `render_*`/tab functions and CSS.
-- **Domain math:** odds conversion helpers `american_to_decimal` (1126), `calculate_parlay_odds` (1132).
+### S1. `dashboard/app.py` mixes data loading, AI HTTP, secrets, domain math, and presentation — **8/10**
+**Location:** `dashboard/app.py` (2492 lines).
+**Problem:** A single Streamlit module spans every layer:
+- **Secrets:** `get_secret()` (97) reads `st.secrets`/`os.environ`; four module-level API keys captured at import (106–109).
+- **Data loading:** `load_games()` (230) reads JSON files from hardcoded paths (`data/schedules/current_week_games.json`, 234).
+- **External AI HTTP:** `get_ai_analysis()` (594) constructs `OpenAI(base_url="https://api.x.ai/v1", ...)` (609) and a second OpenAI client (621) inline and calls the chat API.
+- **Domain math:** nested `american_to_decimal` (1126) and `calculate_parlay_odds` (1132).
+- **Presentation:** the bulk of the file (tabs, CSS, `render_*` blocks).
 
-Any change to a query, an AI endpoint, or an odds formula forces edits to the UI file, and none of it is testable without a DB and live network.
+Any change to a data path, an AI endpoint, or an odds formula forces edits to the UI module, and none of it is unit-testable without files and live network.
 
-**Remediation:** Extract collaborators and keep the module presentation-only:
+**Remediation:** Extract collaborators; keep the module presentation-only.
 ```python
 # dashboard/services.py
-class GameRepository:        # sqlite only
-    def load_games(self) -> pd.DataFrame: ...
-class AIAnalyst:             # one HTTP/SDK call site per provider
+class GameRepository:        # file/JSON access only
+    def load_games(self) -> list[dict]: ...
+class AIAnalyst:             # one client-construction site
+    def __init__(self, client): self._client = client
     def analyze(self, game) -> str: ...
 class OddsMath:              # pure functions
     @staticmethod
     def american_to_decimal(o): ...
 ```
-The render functions then receive already-loaded data.
+The render code then receives already-loaded data and an injected `AIAnalyst`.
 
-### S2. `MasterPipeline` coordinates *and* implements every low-level adapter — **8/10**
-**Location:** `src/orchestrator/master_pipeline.py`, `class MasterPipeline` (102).
-**Problem:** Beyond legitimately sequencing stages (the `self.stages` list at 120–129 is good design), the class also *is* the persistence layer and the notifier: `_stage_persistence` opens `sqlite3.connect(...)` inline (262), `_save_predictions` (293) and `_save_bets` (300) each re-open their own sqlite connection, and `_send_email_alert` / `_send_slack_alert` (582/604) embed channel logic. The orchestrator should delegate persistence and notification to injected services, not contain them.
-**Aggravating duplication:** `_initialize_components` is defined twice (284 and 467); `_calculate_kelly_stakes` (677) is shadowed by a dead `_calculate_kelly_stakes_OLD` (719). Duplicate `def`s mean the earlier definition is silently discarded by Python — dead, confusing code that obscures responsibilities.
-**Remediation:** Inject `repository`, `notifier`, and `kelly` collaborators; delete the `_OLD`/duplicate methods; keep `MasterPipeline` to stage orchestration only.
+### S2. `MasterPipeline` coordinates *and* owns I/O, modelling, sizing, persistence, and visualization — **8/10**
+**Location:** `src/orchestrator/master_pipeline.py`, `class MasterPipeline` (125).
+**Problem:** Beyond orchestration it directly performs many distinct jobs:
+- Loads the model from disk by trying hardcoded paths (`_load_model`, 223–243).
+- Fetches and normalizes odds/ESPN games (`fetch_todays_games`, 245).
+- Computes Kelly bet sizing inline (`calculate_bet_size`, 453–486).
+- Serializes picks to JSON, generates visualizations, and writes adaptive-learning records (`run_daily_pipeline`, 577–725).
 
-### S3. `APIIntegrations` is a single class fused to three unrelated providers + caching — **6/10**
-**Location:** `agents/api_integrations.py`, `class APIIntegrations` (11).
-**Problem:** One class reaches into The Odds API (`get_odds`, 21), OpenWeatherMap (`get_weather`, 30), and NewsAPI (`get_news`, 39), each building URLs and calling `requests.get` inline, while also implementing a TTL cache (`_get_cached`). Three independent integration responsibilities plus caching live in one type, so a change to any provider touches the shared class.
-**Remediation:** One small client class per provider behind a common `fetch()` contract, and a separate `CachingClient` decorator that wraps any client.
+Bet-sizing math, model-loading, and output rendering are separate responsibilities that should live in their own collaborators; `MasterPipeline` should sequence them.
+
+**Remediation:** Move `calculate_bet_size` into `src/betting/kelly.py`, `_load_model` behind a `ModelProvider`, and the JSON/visual/record steps into a `PickReporter`. The pipeline keeps only the step sequence in `run_daily_pipeline`.
+
+### S3. `ConsensusSwarm` mixes pipeline construction with consensus orchestration (and is half-stubbed) — **5/10**
+**Location:** `src/swarms/consensus_swarm.py`, `class ConsensusSwarm` (14).
+**Problem:** The class both builds per-model `PredictionPipeline` objects (`_initialize_pipelines`, 68) and runs the multi-phase consensus (`generate_daily_picks`/`_individual_analysis`/`_voting_phase`/`_assign_tier`). Combined with the duplicate `__init__` and the dead second `except` clause (74/76), the responsibilities are tangled and partly non-functional (several methods are `...` stubs returning `[]`).
+**Remediation:** Inject the `dict[str, PredictionPipeline]` (built by a small factory) and keep `ConsensusSwarm` focused on voting/consensus.
 
 ---
 
 ## O — Open/Closed
 
-### O1. AI-provider selection via `if/elif` on a `provider` string — **7/10**
-**Location:** `dashboard/app.py`, `get_ai_analysis` (594): `if provider == "grok"` / `elif "claude"` / `elif "openai"` / `elif "gpt4"` / `else` (596–605).
-**Problem:** Adding a provider requires editing this function *and* writing a new `_get_*_analysis`. (Also note dead code: the `return None` at 607 and `return _get_grok_analysis(...)` at 609 are unreachable after the `if/elif/else` — a smell that this dispatch has been edited repeatedly.)
-**Remediation:** A registry/dict of providers:
+### O1. `RequestOrchestrator` routes by a two-level `if/elif` chain on endpoint substrings + per-API endpoint names — **7/10**
+**Location:** `src/api/request_orchestrator.py`, `_make_api_call` (226–347). Outer dispatch keys off `request.endpoint`/`request.api_name`: `if "odds" in request.endpoint.lower() or request.api_name == "odds_api"` (227), `elif "espn" ...` (256), `elif "noaa" ...` (293), `else: raise NotImplementedError` (345). Each branch then has its own inner `if/elif` over endpoint names (e.g. ESPN: `scoreboard`/`game_summary`/`teams`/`team_schedule`/`standings`/`news` at 266–284) plus an inline lazy `import` and concrete client construction.
+**Problem:** Adding a data source means editing the outer chain *and* writing a new branch; adding an endpoint to an existing source means editing that source's inner chain. The router is closed to extension on two axes, and each branch hardwires its concrete client (see D1's sibling pattern). Unhandled cases degrade to `raise NotImplementedError` (247, 286, 337, 345).
+**Remediation:** Register one handler object per API, each exposing its own endpoint map:
 ```python
-PROVIDERS = {
-    "grok":   GrokAnalyst(),
-    "claude": ClaudeAnalyst(),
-    "openai": OpenAIAnalyst(),
-}
-def get_ai_analysis(game, provider="grok"):
-    return PROVIDERS.get(provider, PROVIDERS["grok"]).analyze(game)
+self._apis = {"odds_api": OddsApiHandler(), "espn_api": EspnHandler(), "noaa_api": NoaaHandler()}
+api = self._resolve(request)            # name/substring -> handler
+return await api.handle(request)        # handler owns its endpoint dispatch
 ```
-New providers register without touching existing code.
+New sources/endpoints are added by registering or extending a handler, not by editing the router.
 
-### O2. Notification channel dispatch via `if/elif` on channel name — **6/10**
-**Location:** `src/orchestrator/master_pipeline.py`, `_send_notifications` (307): `for channel in channels: if channel == "email": ... elif channel == "slack": ...` (311–314).
-**Problem:** Each new channel (SMS, webhook, desktop — senders for several already exist under `src/notifications/`) requires editing this branch plus adding a `_send_*` method on the pipeline. Extension forces modification of the orchestrator.
-**Remediation:** Map channel name to a `Notifier` object and iterate:
-```python
-NOTIFIERS = {"email": EmailSender(), "slack": SlackSender(), "sms": SMSSender()}
-for name in channels:
-    if n := NOTIFIERS.get(name):
-        n.send(context)
-```
-
-### O3. `APIIntegrations` adds new data sources only by editing the class — **5/10**
-**Location:** `agents/api_integrations.py` (`get_odds`/`get_weather`/`get_news`, 21/30/39).
-**Problem:** Each external source is a hardcoded method on one class; a new source means a new method on the existing class rather than a new pluggable client. This is the OCP face of S3.
-**Remediation:** Same as S3 — a provider interface + registry so sources are added by registration, not class edits.
+### O2. AI-provider selection via `if provider == ...` in the dashboard — **5/10**
+**Location:** `dashboard/app.py`, `get_ai_analysis` (594): `if provider == "grok" and XAI_API_KEY:` (607) / `if provider == "gpt" and OPENAI_API_KEY:` (619).
+**Problem:** Adding a provider means editing this function and adding another inline client-construction block. Small today (two providers), but it is the seam that grows every time a model is added.
+**Remediation:** A `PROVIDERS` registry mapping name → an `AIAnalyst` instance (see S1), selected by key, so providers are added by registration rather than by editing the function.
 
 ---
 
 ## L — Liskov Substitution
 
-### L1. `SwarmBase` is an unused base class — no real substitution contract exists — **3/10**
-**Location:** `src/swarms/swarm_base.py`, `class SwarmBase` (36).
-**Problem:** `SwarmBase` defines a consensus contract (`make_decision`/`_collect_votes`/`_reach_consensus`), but **nothing inherits it**: `ConsensusSwarm` (`consensus_swarm.py:9`), `PredictionPipeline` (`prediction_pipeline.py:12`), `ValidationSwarm` (`validation_swarm.py:15`) and `StrategyGenerationSwarm` (`strategy_generation_swarm.py:14`) are all standalone classes. There is therefore no LSP violation in practice, but the base is dead weight that misleads readers into thinking a polymorphic swarm hierarchy exists. (`_collect_votes` at 116–123 also returns hardcoded `"approve"`/`0.8` stubs, so even direct use would not honor any contract.)
-**Remediation:** Either make the real swarms subclass `SwarmBase` and conform to its contract, or delete `SwarmBase`. As-is it is a phantom abstraction.
-**Note on the rest of L:** With no `isinstance` checks, no `NotImplementedError` overrides, and no other shared base hierarchies in the scope, there are no further substitution violations to report. `BaseAgent.run` (`base_agent.py:197`) is a legitimate `@abstractmethod` and is not an LSP problem.
+### L1. `SwarmBase`'s inherited `make_decision` returns hardcoded-stub votes, so subclasses inherit a non-functional contract — **4/10 (weak-form smell)**
+**Location:** `src/swarms/swarm_base.py`, `_collect_votes` (99–123).
+**Problem:** This is **not** a classic substitution break — all three subclasses (`ConsensusSwarm`, `ValidationSwarm`, `StrategyGenerationSwarm`) correctly call `super().__init__(...)` and so satisfy the base invariants. The weaker concern is behavioral: `SwarmBase._collect_votes` ignores the agents entirely and returns a fixed `{"vote": "approve", "confidence": 0.8, "reasoning": "Default reasoning"}` for every agent (116–121). `StrategyGenerationSwarm._selection_phase` (`strategy_generation_swarm.py:83`) and `ValidationSwarm` (`validation_swarm.py:68`) then call this inherited `make_decision` and act on a decision that was never actually derived from agent input. The inherited method therefore does not do what its name/docstring promise, so subclasses relying on it get behavior that violates the *spirit* of the contract even though the type signature is honored.
+**Remediation:** Either make `_collect_votes` genuinely query agents (via the message bus the code comments already anticipate at 113), or mark `SwarmBase` abstract and force subclasses to supply a real vote-collection implementation, so no subclass silently inherits placeholder consensus.
+**Notes on the rest of L:** there are no `isinstance` polymorphism substitutes and no subclasses overriding methods to raise `NotImplementedError` anywhere in scope (the only `NotImplementedError` raises are leaf stub-handlers in `src/api/request_orchestrator.py`). `BaseAgent.run` (`base_agent.py:197`) is a legitimate `@abstractmethod`. `PredictionPipeline` (`prediction_pipeline.py:27`) deliberately does **not** inherit `SwarmBase`, which is correct — it is not a consensus body.
 
 ---
 
 ## I — Interface Segregation
 
-### I1. `BaseAgent` base is broadly OK; only minor over-provisioning — **4/10**
+### I1. `BaseAgent` base is broadly well-segregated; only minor over-provisioning — **3/10**
 **Location:** `src/agents/base_agent.py`, `class BaseAgent(ABC)` (58).
-**Problem:** This base is actually well-segregated: it forces only one abstract method (`run`, 197) and otherwise supplies optional lifecycle/messaging/memory helpers. The mild ISP concern is that **every** agent inherits tool-registry (`register_tool`/`get_tool`), message-queue, and memory machinery even if a given agent uses none of it, widening the surface each subclass and its tests must understand. This is a low-severity smell, not a forced-stub problem (no subclass is compelled to implement unused abstract methods).
-**Remediation (optional):** Split optional concerns into mixins/protocols (`Messaging`, `ToolUsing`, `Memoryful`) and have `BaseAgent` provide only lifecycle + the abstract `run`. Agents opt in to the mixins they need.
-**Unable to verify:** whether concrete agents (`research_agent`, `worker_agents`, etc.) actually leave the inherited tool/memory features unused — not all subclasses were read in full.
+**Problem:** This base is actually a good ISP citizen: it forces exactly one abstract method (`run`, 197) and otherwise supplies optional helpers. The mild concern is that **every** agent inherits the tool registry (`register_tool`/`get_tool`, 105/118), the asyncio message queue (`send_message`/`receive_message`/`process_messages`, 122–157), and the memory store (`update_memory`/`get_memory`, 182–190) whether or not it uses them, widening the surface each subclass and its tests must reason about. This is a smell, not a forced-stub problem.
+**Remediation (optional polish):** Split optional concerns into mixins/protocols (`Messaging`, `ToolUsing`, `Memoryful`); have `BaseAgent` provide only lifecycle + the abstract `run`, and let agents opt into the mixins they actually need.
+**Unable to verify:** whether concrete agents leave these inherited features unused — not all agent subclasses were read in full, so the real severity could be lower or slightly higher.
 
 ---
 
 ## D — Dependency Inversion
 
-### D1. `MasterPipeline` hard-imports concrete components inside every stage and opens sqlite3 directly — **9/10**
-**Location:** `src/orchestrator/master_pipeline.py`. Each stage does an inline `from ... import` of a concrete type and instantiates it:
+### D1. `MasterPipeline` hard-binds every concrete component (via lazy `@property` instantiation) and hardcoded paths — **9/10**
+**Location:** `src/orchestrator/master_pipeline.py`, properties 151–221 and `_load_model` 223–243:
 ```
-192  pipeline = DataPipeline()                      # _stage_data_collection
-201  feature_pipeline = FeaturePipeline()           # _stage_feature_engineering
-213  pred_pipeline = PredictionPipeline()           # _stage_model_prediction
-225  swarm = ConsensusSwarm()                        # _stage_consensus
-249  kelly = KellyCriterion()                        # _stage_risk_management
-262  conn = sqlite3.connect(self.config.get("db_path", "data/nfl.db"))   # _stage_persistence
+155  from agents.api_integrations import TheOddsAPI;    self._odds_api = TheOddsAPI()
+164  from agents.api_integrations import ESPNAPI;       self._espn_api = ESPNAPI()
+182  from agents.api_integrations import NOAAWeatherAPI;self._weather_api = NOAAWeatherAPI()
+191  from src.agents.llm_council import get_council;    self._llm_council = get_council()
+200  from src.agents.research_agent import get_research_agent; ...
+209  from src.learning.adaptive_engine import get_adaptive_engine; ...
+218  from src.visualization.prediction_visualizer import get_visualizer; ...
+230  model_paths = [PROJECT_ROOT/"models"/"xgboost_favorites_only.pkl", ...]  # hardcoded
 ```
-**Problem:** The highest-level orchestrator depends directly on every concrete low-level implementation and on `sqlite3`, so it cannot be unit-tested without real components/DB and cannot swap implementations (e.g. a different consensus engine or an in-memory store) without editing the stage methods. The lazy in-method imports also hide the dependency graph.
-**Remediation:** Constructor-inject the collaborators against abstractions and resolve them once in a composition root:
+**Problem:** The highest-level orchestrator constructs each concrete low-level dependency itself (inside lazy properties that hide the dependency graph via in-method imports) and hardcodes model file paths. It cannot be unit-tested with fakes and cannot swap an implementation (different odds source, an in-memory learner, a stub council) without editing the class.
+**Remediation:** Constructor-inject the collaborators against abstractions, resolved once in a composition root (e.g. `scripts/`):
 ```python
 class MasterPipeline:
-    def __init__(self, data: DataSource, features: FeatureEngine,
-                 predictor: Predictor, consensus: ConsensusEngine,
-                 kelly: StakeSizer, repo: Repository, notifier: Notifier,
-                 config=None): ...
+    def __init__(self, odds, espn, weather, council, research,
+                 learner, visualizer, model_provider, config=None): ...
 ```
+Keep lazy loading if desired, but lazily resolve *injected factories*, not hardcoded concretes.
 
-### D2. `dashboard/app.py` depends directly on sqlite3 and a hardcoded DB path — **8/10**
-**Location:** `dashboard/app.py`, `load_games()` (230–240): `db_path = "data/nfl.db"` then `sqlite3.connect(db_path)` with inline SQL.
-**Problem:** Presentation depends directly on a concrete database and a literal path, duplicating persistence knowledge already needed elsewhere; the dashboard can never be rendered/tested against a fake data source.
-**Remediation:** Depend on the injected `GameRepository` from S1; the dashboard should never import `sqlite3`. Source the path from config rather than a literal.
+### D2. Dashboard constructs LLM clients and reads paths/secrets directly — **6/10**
+**Location:** `dashboard/app.py`: `get_ai_analysis` builds `OpenAI(...)` clients inline (609, 621); `load_games` hardcodes JSON paths (234, 243); `get_secret`/module keys at 97–109.
+**Problem:** Presentation depends on concrete SDK clients, concrete file locations, and a concrete secrets mechanism, so it can never be exercised against fakes.
+**Remediation:** Inject an `AIAnalyst` and a `GameRepository` (see S1); pass clients/paths/secrets in from a composition root rather than constructing them in the view.
 
-### D3. `EmailSender` reads its own environment and binds to SMTP at construction — **7/10**
-**Location:** `src/notifications/email_sender.py`, `__init__` (19–27): six `os.getenv(...)` reads; `send()` (29–52) builds and drives `smtplib.SMTP` directly.
-**Problem:** The class is its own config source and transport, so callers cannot inject configuration or a fake transport for testing, and switching providers means editing the class. (It is also riddled with duplicate method definitions — `send_bet_alert` at 54 *and* 60, `_format_bet_email` at 71 *and* 121 — where Python silently keeps only the last definition; a correctness/clarity defect alongside the DIP issue.)
-**Remediation:** Inject an `EmailConfig` dataclass and an SMTP-transport abstraction:
-```python
-class EmailSender:
-    def __init__(self, config: EmailConfig, transport: SmtpTransport): ...
-```
-Build `EmailConfig` from env at the composition root, not inside the sender. Remove the duplicate `def`s.
+### D3. Notification senders are constructed and configured by their callers, not abstracted — **5/10**
+**Location:** `src/notifications/email_sender.py` (`EmailSender.__init__(smtp_user, smtp_password, recipient)`, 20), `src/notifications/sms_sender.py` (`SMSSender.__init__(...)`, 16), `src/notifications/desktop_notifier.py` (16).
+**Problem:** These classes are reasonably clean (config is passed in, not read from env internally — a point in their favor), but there is **no common `Notifier` abstraction**: each exposes a differently named method (`send_bet_alert`, `send_quick_alert`, `send_toast`). High-level callers must therefore know each concrete type and method name, so they depend on concretions rather than an interface. (Note `EmailSender` binds to Gmail specifically via `self.smtp_server = "smtp.gmail.com"` at line 35, hardcoding the provider.)
+**Remediation:** Define a `Notifier` protocol with a single `send(context) -> bool` and have all three implement it; callers then depend on `list[Notifier]`. Make the SMTP host a constructor parameter rather than a hardcoded Gmail value.
+**Unable to verify:** the exact call sites that wire these senders (the consuming scripts under `scripts/` were not all read), so the precise blast radius of D3 is approximate.
 
 ---
 
 ## Recommended order of attack
-1. **D1 + S2** — introduce a composition root and inject `MasterPipeline`'s stage collaborators; delete the duplicate/`_OLD` methods. This unlocks testing of the central orchestrator and removes the inline sqlite3 coupling.
-2. **S1 + D2** — split `dashboard/app.py` into repository / AI-analyst / odds-math services + a presentation-only view.
-3. **O1 + O2** — replace the provider and channel `if/elif` chains with small registries (the `StrategyRegistry` pattern already in the codebase is the template).
-4. **S3 + O3** — break `APIIntegrations` into one client per provider behind a common interface, with a caching decorator.
-5. **D3** — inject config/transport into `EmailSender` and remove its duplicate method definitions.
-6. **L1** — either wire the real swarms onto `SwarmBase` or delete the phantom base; **I1** is optional polish.
+1. **D1 + S2** — introduce a composition root and inject `MasterPipeline`'s collaborators; move Kelly sizing into `src/betting/kelly.py` and model loading behind a provider. Highest leverage: unlocks testing of the central orchestrator.
+2. **S1 + D2** — split `dashboard/app.py` into `GameRepository` / `AIAnalyst` / `OddsMath` services plus a presentation-only view.
+3. **O1 + O2** — replace the endpoint and `provider` `if/elif` chains with per-API/per-provider handler registries (the existing `StrategyRegistry` is the template).
+4. **D3** — introduce a common `Notifier` protocol and parameterize the SMTP host.
+5. **L1** — give `SwarmBase._collect_votes` a real implementation (or make it abstract) so subclasses stop inheriting placeholder consensus.
+6. **I1** — optional mixin/protocol split of `BaseAgent`.
