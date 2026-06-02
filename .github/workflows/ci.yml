@@ -40,6 +40,12 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
 
+      # xgboost's macOS wheels link against OpenMP at runtime; without libomp
+      # `import xgboost` fails on the macos runners. No-op on Linux/Windows.
+      - name: Install OpenMP runtime (macOS)
+        if: runner.os == 'macOS'
+        run: brew install libomp
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip

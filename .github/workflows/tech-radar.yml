@@ -1,0 +1,65 @@
+name: tech-radar
+
+# Weekly "what's new in our stack" digest. Compares our pinned dependencies
+# against the latest PyPI releases and posts the result to a single rolling
+# GitHub Issue (label: tech-radar) so the report stays in one place instead of
+# spamming a new issue every week.
+
+on:
+  schedule:
+    # Mondays at 08:00 UTC.
+    - cron: '0 8 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tech-radar
+  cancel-in-progress: true
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b  # v5.3.0
+        with:
+          python-version: '3.11'
+
+      - name: Generate digest
+        run: python scripts/tech_radar.py --output tech-radar.md
+
+      - name: Post or update the tech-radar issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # Ensure the label exists (ignore "already exists").
+          gh label create tech-radar \
+            --color 0e8a16 \
+            --description "Automated weekly dependency/tooling digest" \
+            2>/dev/null || true
+
+          title="📡 Tech Radar"
+          existing=$(gh issue list --label tech-radar --state open \
+            --json number --jq '.[0].number' || true)
+
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --body-file tech-radar.md
+            gh issue comment "$existing" \
+              --body "🔄 Tech Radar refreshed for the week of $(date -u +%Y-%m-%d)."
+            echo "Updated existing tech-radar issue #$existing."
+          else
+            gh issue create \
+              --title "$title" \
+              --label tech-radar \
+              --body-file tech-radar.md
+            echo "Created new tech-radar issue."
+          fi

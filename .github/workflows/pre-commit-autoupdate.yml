@@ -1,0 +1,82 @@
+name: pre-commit autoupdate
+
+# Keeps .pre-commit-config.yaml hook revisions current. Runs weekly and opens a
+# PR when any hook has a newer release, so the local hooks track upstream.
+#
+# NOTE: the pinned dev-tool *packages* in requirements-dev.txt (black, ruff,
+# isort, mypy) are bumped separately by Dependabot's "dev-tooling" group. The
+# CI lint job fails loudly if the two ever disagree, which is the guardrail
+# against the kind of black version drift this automation exists to prevent.
+
+on:
+  schedule:
+    # Mondays at 07:00 UTC, after Dependabot's 06:00 run.
+    - cron: '0 7 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pre-commit-autoupdate
+  cancel-in-progress: true
+
+jobs:
+  autoupdate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # push the update branch
+      pull-requests: write  # open the PR
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b  # v5.3.0
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install pre-commit
+        run: python -m pip install --upgrade pip pre-commit
+
+      - name: Run pre-commit autoupdate
+        run: pre-commit autoupdate
+
+      - name: Open PR if hooks changed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- .pre-commit-config.yaml; then
+            echo "No pre-commit hook updates available."
+            exit 0
+          fi
+
+          branch="chore/pre-commit-autoupdate"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Reset any pre-existing remote branch so the PR always shows a clean diff.
+          git checkout -B "$branch"
+          git add .pre-commit-config.yaml
+          git commit -m "chore: pre-commit autoupdate"
+          git push --force-with-lease -u origin "$branch"
+
+          if gh pr list --head "$branch" --state open --json number --jq '.[0].number' | grep -q .; then
+            echo "PR already open for $branch; updated branch in place."
+          else
+            cat > pr-body.md <<'EOF'
+          Automated `pre-commit autoupdate`. Review the hook revision bumps in the diff.
+
+          If a formatter hook (black/isort/ruff) changed here, make sure the matching
+          pin in `requirements-dev.txt` is bumped too (Dependabot's `dev-tooling`
+          group usually does this) so CI and local hooks agree.
+          EOF
+            gh pr create \
+              --title "chore: pre-commit autoupdate" \
+              --body-file pr-body.md \
+              --base master \
+              --head "$branch" \
+              --label dependencies \
+              --draft
+          fi
