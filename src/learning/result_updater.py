@@ -28,14 +28,16 @@ class ResultUpdater:
 
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
-            rows = conn.execute("""
+            rows = conn.execute(
+                """
                 SELECT prediction_id, game_id, home_team, away_team,
                        pick, bet_type, odds, timestamp
                 FROM predictions
                 WHERE actual_result IS NULL
                 ORDER BY timestamp DESC
                 LIMIT 100
-                """).fetchall()
+                """
+            ).fetchall()
         return [dict(r) for r in rows]
 
     def update_from_scores(

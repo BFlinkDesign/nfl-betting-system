@@ -51,7 +51,7 @@ data/
 *.h5
 # Allow source model code (src/models/*.py are tracked source, not artifacts)
 !src/models/
-!src/models/**
+!src/models/*.py
 
 # Reports
 reports/

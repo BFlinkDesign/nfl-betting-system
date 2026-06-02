@@ -7,12 +7,7 @@ from typing import Dict, List, Optional
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.metrics import (
-    accuracy_score,
-    brier_score_loss,
-    log_loss,
-    roc_auc_score,
-)
+from sklearn.metrics import accuracy_score, brier_score_loss, log_loss, roc_auc_score
 
 from .base import NFLModel
 

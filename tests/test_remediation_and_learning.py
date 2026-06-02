@@ -55,7 +55,8 @@ class TestResultUpdater:
 
         db_path = str(tmp_path / "test_learn.db")
         conn = sqlite3.connect(db_path)
-        conn.executescript("""
+        conn.executescript(
+            """
             CREATE TABLE IF NOT EXISTS predictions (
                 prediction_id TEXT PRIMARY KEY,
                 game_id TEXT, timestamp TEXT, home_team TEXT, away_team TEXT,
@@ -71,7 +72,8 @@ class TestResultUpdater:
                 model_name, council_consensus, tier, features)
             VALUES ('pred_001', 'g1', '2024-01-01', 'KC', 'BUF', 'home',
                 'moneyline', 0, -150, 0.65, 0.05, 'xgb', 0.8, 'A_tier', '{}');
-            """)
+            """
+        )
         conn.commit()
         conn.close()
 
