@@ -230,7 +230,7 @@ class GrokEnhancedPicksGenerator(DailyPicksGenerator):
                         logger.info(
                             f"    Weather: {weather.get('temperature')}°F, Wind: {weather.get('wind_speed')}"
                         )
-                except:
+                except Exception:
                     logger.warning("    Weather data unavailable")
 
             # Generate base prediction

@@ -808,7 +808,8 @@ with tab_models:
 # =============================================================================
 with tab_train:
     st.markdown(
-        '<div class="lab-section-header">🏋️ MODEL TRAINING</div>', unsafe_allow_html=True
+        '<div class="lab-section-header">🏋️ MODEL TRAINING</div>',
+        unsafe_allow_html=True,
     )
 
     col_train_config, col_train_status = st.columns([1, 1])

@@ -6,86 +6,96 @@ on:
     - cron: '0 8 * * 1'
   workflow_dispatch:  # Allow manual trigger
 
+permissions:
+  contents: read
+
+concurrency:
+  group: weekly-retrain
+  cancel-in-progress: false
+
 jobs:
   retrain-model:
     name: Retrain NFL Prediction Model
     runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
-        cache: 'pip'
-    
-    - name: Install dependencies
-      run: |
-        pip install -r requirements.txt
-    
-    - name: Download latest NFL data
-      env:
-        PYTHONPATH: ${{ github.workspace }}
-      run: |
-        python scripts/download_data.py --seasons 2024 --force --no-pbp
-    
-    - name: Train favorites specialist model
-      env:
-        PYTHONPATH: ${{ github.workspace }}
-      run: |
-        python scripts/train_favorites_specialist.py
-      continue-on-error: true
-    
-    - name: Run validation tests
-      env:
-        PYTHONPATH: ${{ github.workspace }}
-      run: |
-        python scripts/backtest.py
-      continue-on-error: true
-    
-    - name: Upload model artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: retrained-model-${{ github.run_number }}
-        path: |
-          models/*.pkl
-          models/*.joblib
-          reports/retrain_*.json
-        retention-days: 90
-    
-    - name: Create performance report
-      env:
-        PYTHONPATH: ${{ github.workspace }}
-      run: |
-        python scripts/generate_performance_dashboard.py
-      continue-on-error: true
-    
-    - name: Commit updated model (if improved)
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add models/ reports/
-        git diff --quiet && git diff --staged --quiet || git commit -m "chore: Weekly model retrain - $(date +'%Y-%m-%d')"
-        git push
-      continue-on-error: true
-    
-    - name: Create release on significant improvement
-      if: success()
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: model-v${{ github.run_number }}
-        release_name: Weekly Model Update ${{ github.run_number }}
-        body: |
-          Automated weekly model retraining completed successfully.
-          
-          Training Date: $(date +'%Y-%m-%d')
-          Model Version: ${{ github.run_number }}
-          
-          See attached artifacts for model files and performance reports.
-        draft: false
-        prerelease: false
-      continue-on-error: true
+    permissions:
+      # Needed to commit refreshed models and publish a release.
+      contents: write
 
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b  # v5.3.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Download latest NFL data
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/download_data.py --seasons 2024 --force --no-pbp
+
+      - name: Train favorites specialist model
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/train_favorites_specialist.py
+        continue-on-error: true
+
+      - name: Run validation tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest.py
+        continue-on-error: true
+
+      - name: Upload model artifacts
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882  # v4.4.3
+        with:
+          name: retrained-model-${{ github.run_number }}
+          path: |
+            models/*.pkl
+            models/*.joblib
+            reports/retrain_*.json
+          retention-days: 90
+          if-no-files-found: ignore
+
+      - name: Create performance report
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/generate_performance_dashboard.py
+        continue-on-error: true
+
+      - name: Commit updated model (if improved)
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add models/ reports/ || true
+          git diff --quiet && git diff --staged --quiet || \
+            git commit -m "chore: Weekly model retrain - $(date +'%Y-%m-%d')"
+          git push
+        continue-on-error: true
+
+      - name: Create release on significant improvement
+        if: success()
+        uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191  # v2.0.8
+        with:
+          tag_name: model-v${{ github.run_number }}
+          name: Weekly Model Update ${{ github.run_number }}
+          body: |
+            Automated weekly model retraining completed successfully.
+
+            Model Version: ${{ github.run_number }}
+            Commit: ${{ github.sha }}
+
+            See attached artifacts for model files and performance reports.
+          draft: false
+          prerelease: false
+        continue-on-error: true

@@ -205,6 +205,7 @@ Generate {num_hypotheses} hypotheses now:"""
                     "model": "grok-2-1212",
                     "temperature": 0.8,  # Higher temperature for creativity
                 },
+                timeout=30,
             )
 
             if response.status_code == 200:

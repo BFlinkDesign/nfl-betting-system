@@ -61,7 +61,9 @@ class EmailSender:
             msg.attach(html_part)
 
             # Send via Gmail SMTP
-            with smtplib.SMTP_SSL(self.smtp_server, self.smtp_port) as server:
+            with smtplib.SMTP_SSL(
+                self.smtp_server, self.smtp_port, timeout=10
+            ) as server:
                 server.login(self.smtp_user, self.smtp_password)
                 server.send_message(msg)
 

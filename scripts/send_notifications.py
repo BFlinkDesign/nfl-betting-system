@@ -99,7 +99,7 @@ def send_discord_notification(picks_file: str, webhook_url: str = None):
 
     # Send to Discord
     try:
-        response = requests.post(webhook_url, json=message)
+        response = requests.post(webhook_url, json=message, timeout=10)
         if response.status_code == 204:
             logger.info("Discord notification sent successfully")
             return True

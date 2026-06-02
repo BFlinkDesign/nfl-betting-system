@@ -604,7 +604,9 @@ class AdaptiveEngine:
                 else (
                     "🟡"
                     if segment.recommendation == "maintain"
-                    else "🔴" if segment.recommendation == "stop" else "⚪"
+                    else "🔴"
+                    if segment.recommendation == "stop"
+                    else "⚪"
                 )
             )
 

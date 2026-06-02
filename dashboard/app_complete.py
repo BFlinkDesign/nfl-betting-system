@@ -368,9 +368,7 @@ def show_picks_page(user):
     st.divider()
 
     # Help widgets in tabs
-    tab1, tab2, tab3 = st.tabs(
-        ["💬 Ask Questions", "🎓 Learn the Basics", "🤖 AI Setup"]
-    )
+    tab1, tab2, tab3 = st.tabs(["💬 Ask Questions", "🎓 Learn the Basics", "🤖 AI Setup"])
 
     with tab1:
         show_rag_qa_widget()
@@ -531,9 +529,7 @@ def show_performance_page(user):
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Total Bets", total_bets)
-        st.caption(
-            f"✅ {won_bets} won • ❌ {lost_bets} lost • ⏳ {pending_bets} pending"
-        )
+        st.caption(f"✅ {won_bets} won • ❌ {lost_bets} lost • ⏳ {pending_bets} pending")
     with col2:
         st.metric("Win Rate", f"{win_rate:.1f}%", delta=f"{win_rate - 50:.1f}% vs 50%")
     with col3:

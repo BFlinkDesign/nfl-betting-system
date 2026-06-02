@@ -481,7 +481,7 @@ class OddsCache:
                             commence_time - now
                         ).total_seconds() / 3600  # Hours
                         min_time_to_game = min(min_time_to_game, time_to_game)
-                    except:
+                    except Exception:
                         pass
 
             # Dynamic TTL based on proximity to kickoff

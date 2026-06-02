@@ -1,0 +1,26 @@
+# Development & CI tooling — versions pinned for reproducible local + CI runs.
+# Keep these in sync with .pre-commit-config.yaml so local hooks and CI agree.
+
+# Formatting / linting
+black==26.3.1
+isort==5.13.2
+ruff==0.1.9
+mypy==1.8.0
+types-requests
+types-PyYAML
+
+# Testing
+pytest==9.0.3
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+
+# Security
+bandit==1.7.6
+detect-secrets==1.4.0
+
+# Build / packaging
+build==1.0.3
+wheel==0.46.2
+
+# Pre-commit runner
+pre-commit==3.6.0

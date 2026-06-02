@@ -217,7 +217,7 @@ def main():
         with open("config/config.yaml") as f:
             config = yaml.safe_load(f)
         xgb_config = config.get("model", {})
-    except:
+    except Exception:
         xgb_config = {}
 
     xgb_model = XGBoostNFLModel(xgb_config)

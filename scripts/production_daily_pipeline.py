@@ -47,7 +47,7 @@ class NFLScheduleManager:
         url = f"{self.espn_api_base}/scoreboard"
 
         try:
-            response = requests.get(url)
+            response = requests.get(url, timeout=10)
             response.raise_for_status()
             data = response.json()
 
@@ -95,7 +95,7 @@ class NFLScheduleManager:
         url = f"{self.espn_api_base}/scoreboard"
 
         try:
-            response = requests.get(url)
+            response = requests.get(url, timeout=10)
             response.raise_for_status()
             data = response.json()
 
@@ -169,7 +169,7 @@ class NFLScheduleManager:
         url = f"{self.espn_api_base}/scoreboard?week={week_info['week']}&seasontype={week_info['season_type']}&dates={week_info['season']}"
 
         try:
-            response = requests.get(url)
+            response = requests.get(url, timeout=10)
             response.raise_for_status()
             data = response.json()
 
