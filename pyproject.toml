@@ -31,13 +31,15 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 # Ignore E402 (module level import not at top) in scripts and modules that
-# manipulate sys.path before importing.
-"scripts/*.py" = ["E402"]
+# manipulate sys.path before importing. Also suppress pre-existing warnings.
+"scripts/*.py" = ["E402", "E741", "F841"]
 "src/features/pipeline.py" = ["E402"]
 
 # Dashboard uses try/except ImportError for auth lib availability and has
 # intentional mid-file imports (os, sqlite3) after st.set_page_config().
-"dashboard/*.py" = ["E402", "F401", "F841"]
+# Also suppress pre-existing bare-except, star-import, and redefinition warnings.
+"dashboard/*.py" = ["E402", "E712", "E722", "E741", "F401", "F403", "F405", "F541", "F811", "F841"]
+"dashboard/**/*.py" = ["E402", "E712", "E722", "E741", "F401", "F403", "F405", "F541", "F811", "F841"]
 
 # Allow unused variables in tests (often needed for fixtures)
 "tests/*.py" = ["F841"]

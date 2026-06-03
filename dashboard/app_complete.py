@@ -46,7 +46,7 @@ st.markdown(
 <style>
     /* Beautiful modern design */
     .main {padding: 1rem;}
-    
+
     .metric-card {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         padding: 1.5rem;
@@ -54,13 +54,13 @@ st.markdown(
         color: white;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
-    
+
     .stButton>button {
         border-radius: 8px;
         padding: 0.5rem 2rem;
         font-weight: 600;
     }
-    
+
     .auth-container {
         max-width: 450px;
         margin: 2rem auto;
@@ -368,7 +368,9 @@ def show_picks_page(user):
     st.divider()
 
     # Help widgets in tabs
-    tab1, tab2, tab3 = st.tabs(["💬 Ask Questions", "🎓 Learn the Basics", "🤖 AI Setup"])
+    tab1, tab2, tab3 = st.tabs(
+        ["💬 Ask Questions", "🎓 Learn the Basics", "🤖 AI Setup"]
+    )
 
     with tab1:
         show_rag_qa_widget()
@@ -482,7 +484,7 @@ def show_picks_page(user):
             col_a, col_b = st.columns([1, 3])
             with col_a:
                 if st.button(
-                    f"✅ Track Bet",
+                    "✅ Track Bet",
                     key=f"track_{idx}_{pick['game']}",
                     use_container_width=True,
                 ):
@@ -529,7 +531,9 @@ def show_performance_page(user):
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Total Bets", total_bets)
-        st.caption(f"✅ {won_bets} won • ❌ {lost_bets} lost • ⏳ {pending_bets} pending")
+        st.caption(
+            f"✅ {won_bets} won • ❌ {lost_bets} lost • ⏳ {pending_bets} pending"
+        )
     with col2:
         st.metric("Win Rate", f"{win_rate:.1f}%", delta=f"{win_rate - 50:.1f}% vs 50%")
     with col3:
@@ -676,15 +680,13 @@ def show_bankroll_page(user):
     }
 
     info = profile_info[profile]
-    st.info(
-        f"""
+    st.info(f"""
     **{info['desc']}**
-    
+
     - Bet Range: {info['bet_range']}
     - Target ROI: {info['target_roi']}
     - Risk of Ruin: {info['risk_of_ruin']}
-    """
-    )
+    """)
 
 
 def show_settings_page(user):

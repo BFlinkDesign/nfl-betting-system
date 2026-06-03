@@ -57,8 +57,7 @@ def init_auth_db():
     cursor = conn.cursor()
 
     # Users table
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT UNIQUE NOT NULL,
@@ -76,12 +75,10 @@ def init_auth_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_login TIMESTAMP
         )
-    """
-    )
+    """)
 
     # User settings
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_settings (
             user_id INTEGER PRIMARY KEY,
             bankroll REAL DEFAULT 500,
@@ -92,12 +89,10 @@ def init_auth_db():
             theme TEXT DEFAULT 'light',
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
-    """
-    )
+    """)
 
     # Tracked bets
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS tracked_bets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -113,8 +108,7 @@ def init_auth_db():
             settled_at TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
-    """
-    )
+    """)
 
     # Create admin account if doesn't exist
     try:
@@ -140,7 +134,7 @@ def init_auth_db():
 
         print(f"✅ Admin account created: {ADMIN_EMAIL}")
     except sqlite3.IntegrityError:
-        print(f"ℹ️  Admin account already exists")
+        print("ℹ️  Admin account already exists")
 
     conn.commit()
     conn.close()
@@ -272,7 +266,7 @@ def generate_reset_token(email):
 
     cursor.execute(
         """
-        UPDATE users 
+        UPDATE users
         SET reset_token = ?, reset_token_expires = ?
         WHERE email = ?
     """,
@@ -334,20 +328,18 @@ def send_reset_email(email, token):
     # In production, use SMTP to send actual email
     reset_link = f"http://localhost:8501/?reset_token={token}"
 
-    st.info(
-        f"""
+    st.info(f"""
     📧 **Password Reset Email Sent!**
-    
+
     (In production, this would be sent to: {email})
-    
+
     **Reset Link (valid for 1 hour):**
     ```
     {reset_link}
     ```
-    
+
     Copy this link and paste it in your browser to reset your password.
-    """
-    )
+    """)
 
     return True
 
@@ -414,7 +406,7 @@ def get_user_settings(user_id):
     cursor = conn.cursor()
     cursor.execute(
         """
-        SELECT bankroll, risk_profile, min_edge, min_probability, 
+        SELECT bankroll, risk_profile, min_edge, min_probability,
                notifications_enabled, theme
         FROM user_settings WHERE user_id = ?
     """,
@@ -503,7 +495,7 @@ def add_tracked_bet(
 
     cursor.execute(
         """
-        INSERT INTO tracked_bets 
+        INSERT INTO tracked_bets
         (user_id, game_id, game_description, bet_type, bet_size, odds, notes)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     """,

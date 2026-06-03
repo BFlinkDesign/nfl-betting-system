@@ -325,7 +325,9 @@ class DataSourceAuditor:
                 response = self.session.get(url, timeout=10, allow_redirects=True)
 
                 if response.status_code == 404 or "NoSuchBucket" in response.text:
-                    logger.error("  ❌ AWS S3 Bucket: DOES NOT EXIST (as user reported)")
+                    logger.error(
+                        "  ❌ AWS S3 Bucket: DOES NOT EXIST (as user reported)"
+                    )
                     logger.error(f"  ❌ URL: {url}")
                     self.results.append(
                         {

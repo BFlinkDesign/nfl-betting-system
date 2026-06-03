@@ -457,9 +457,7 @@ class BetResearchTool:
                 conf_marker = (
                     "[HIGH]"
                     if idea["confidence"] == "High"
-                    else "[MED]"
-                    if idea["confidence"] == "Medium"
-                    else "[LOW]"
+                    else "[MED]" if idea["confidence"] == "Medium" else "[LOW]"
                 )
                 print(f"\n   {conf_marker} Bet #{i} ({idea['type']}):")
                 print(f"      {idea['bet']}")

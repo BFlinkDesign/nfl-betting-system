@@ -22,6 +22,7 @@ jobs:
   test:
     name: Test on Python ${{ matrix.python-version }} (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     permissions:
       contents: read
 
@@ -47,10 +48,11 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Run tests with coverage
+        timeout-minutes: 10
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          pytest --cov=src --cov-report=xml --cov-report=html tests/ -m "not integration and not slow"
+          pytest --cov=src --cov-report=xml --cov-report=html tests/ -m "not integration and not slow" --timeout=120
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@0f8570b1a125f4937846a11fcfa3bcd548bd8c97  # v4.6.0

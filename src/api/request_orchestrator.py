@@ -142,9 +142,9 @@ class RequestOrchestrator:
         self.failed: Dict[str, Exception] = {}
 
         # Deduplication
-        self.pending_requests: Dict[
-            str, List[Callable]
-        ] = {}  # endpoint+params -> callbacks
+        self.pending_requests: Dict[str, List[Callable]] = (
+            {}
+        )  # endpoint+params -> callbacks
 
         # Circuit breakers per API
         self.circuit_breakers: Dict[str, CircuitBreaker] = {}

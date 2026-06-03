@@ -304,16 +304,14 @@ def show_api_key_settings():
             """,
         )
 
-        st.info(
-            """
+        st.info("""
         **Free Data Sources (No Keys Needed):**
         - ✅ ESPN API (scores, schedules, team data)
         - ✅ NOAA Weather (stadium weather forecasts)
         - ✅ nflverse (historical play-by-play data)
 
         These are already configured and working!
-        """
-        )
+        """)
 
     # AI Reasoning tab
     with ai_tab:
@@ -378,12 +376,10 @@ def show_api_key_settings():
             """,
         )
 
-        st.success(
-            """
+        st.success("""
         💡 **Recommendation:** Start with Google Gemini (FREE) for AI analysis.
         Add OpenAI + Anthropic later for full 3-AI consensus ($15/season total).
-        """
-        )
+        """)
 
     # Optional APIs tab
     with optional_tab:
@@ -406,11 +402,9 @@ def show_api_key_settings():
             """,
         )
 
-        st.info(
-            """
+        st.info("""
         These APIs are completely optional. The system works great without them!
-        """
-        )
+        """)
 
     st.divider()
 
