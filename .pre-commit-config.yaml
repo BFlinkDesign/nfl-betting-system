@@ -7,21 +7,21 @@ repos:
   # local/pre-commit and CI agree. The weekly pre-commit-autoupdate workflow
   # keeps this current; see .github/workflows/pre-commit-autoupdate.yml.
   - repo: https://github.com/psf/black
-    rev: 26.3.1
+    rev: 26.5.1
     hooks:
       - id: black
         language_version: python3.10
 
   # Linting
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.1.9
+    rev: v0.15.16
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
 
   # Security - Check for secrets
   - repo: https://github.com/Yelp/detect-secrets
-    rev: v1.4.0
+    rev: v1.5.0
     hooks:
       - id: detect-secrets
         args: ['--baseline', '.secrets.baseline']
@@ -29,7 +29,7 @@ repos:
 
   # Trailing whitespace
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -42,7 +42,7 @@ repos:
 
   # Python-specific
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v6.0.0
     hooks:
       - id: debug-statements
       - id: check-docstring-first
@@ -50,14 +50,14 @@ repos:
 
   # Import sorting
   - repo: https://github.com/pycqa/isort
-    rev: 5.13.2
+    rev: 9.0.0a3
     hooks:
       - id: isort
         args: [--profile=black]
 
   # Type checking
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.8.0
+    rev: v2.1.0
     hooks:
       - id: mypy
         additional_dependencies: [types-requests, types-PyYAML]
@@ -65,14 +65,14 @@ repos:
 
   # Markdown linting
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.38.0
+    rev: v0.48.0
     hooks:
       - id: markdownlint
         args: [--fix]
 
   # YAML validation
   - repo: https://github.com/adrienverge/yamllint
-    rev: v1.33.0
+    rev: v1.38.0
     hooks:
       - id: yamllint
         args: [-c=.yamllint.yaml]
