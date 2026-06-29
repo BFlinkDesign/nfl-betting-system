@@ -21,16 +21,16 @@ import streamlit as st
 SIMPLE_EXPLANATIONS = {
     "what_is_ai": """
     🤖 **What is AI? (Explained Simply)**
-    
+
     Imagine you have a super smart friend who:
     - Has read every NFL game ever played
     - Remembers every play, every score, every injury
     - Can do math faster than a calculator
     - Never gets tired or makes silly mistakes
-    
+
     That's what AI is! It's like having the smartest sports friend ever,
     who helps you make better betting decisions.
-    
+
     **In this app:**
     - AI looks at the game (like Chiefs vs Raiders)
     - Thinks about what might happen
@@ -39,16 +39,16 @@ SIMPLE_EXPLANATIONS = {
     """,
     "why_multiple_ais": """
     🎓 **Why Do We Ask 3 Different AIs?**
-    
+
     Imagine you're deciding whether to go to the park:
     - You ask Mom → She says "Check the weather"
     - You ask Dad → He says "Finish homework first"
     - You ask Grandma → She says "Bring a jacket!"
-    
+
     They all see it differently! That's good because:
     - If everyone agrees = PROBABLY a good idea!
     - If they disagree = Maybe think more about it
-    
+
     **Same with AI betting advisors:**
     - GPT-4 might notice something Claude missed
     - Claude might catch a risk Gemini didn't see
@@ -56,34 +56,34 @@ SIMPLE_EXPLANATIONS = {
     """,
     "what_is_confidence": """
     🎯 **What Does "Confidence" Mean?**
-    
+
     Think about guessing what's for dinner:
     - If you smell pizza = HIGH confidence it's pizza! 🍕
     - If you hear sizzling = MEDIUM confidence it's burgers? 🍔
     - If you have no clue = LOW confidence, could be anything 🤷
-    
+
     **In betting:**
     - HIGH confidence = AI is pretty sure (like smelling pizza)
     - MEDIUM confidence = AI thinks so but not 100%
     - LOW confidence = AI isn't sure, be careful!
-    
+
     **Rule of thumb:**
     Only bet when confidence is MEDIUM or HIGH!
     """,
     "what_is_edge": """
     💰 **What is "Edge"? (The Secret to Winning)**
-    
+
     Imagine a coin flip game:
     - Normal: Heads you win $10, Tails you lose $10 = Fair (no edge)
     - UNFAIR: Heads you win $12, Tails you lose $10 = YOU HAVE EDGE!
-    
+
     **Edge means the game is unfair IN YOUR FAVOR!**
-    
+
     Example:
     - Sportsbook says Chiefs have 50% chance to win
     - Our AI says they have 65% chance to win
     - That 15% difference = YOUR EDGE!
-    
+
     **Simple rule:**
     - No edge (0%) = Don't bet (it's a coin flip)
     - Small edge (2-4%) = Maybe bet small
@@ -91,24 +91,24 @@ SIMPLE_EXPLANATIONS = {
     """,
     "why_dont_i_always_win": """
     🎲 **If AI Is Smart, Why Don't I Win Every Time?**
-    
+
     Great question! Here's why:
-    
+
     **Think about Pokemon battles:**
     - Your Charizard has 80% chance to win
     - But sometimes the other Pokemon gets lucky
     - 80% ≠ 100%!
-    
+
     **In betting:**
     - 70% win chance = You win 7 out of 10 times
     - That means you LOSE 3 out of 10 times!
     - That's normal and okay!
-    
+
     **The key:**
     - Keep making good bets (with edge)
     - Over time, you'll win more than you lose
     - But you'll NEVER win every single time
-    
+
     **Like getting good grades:**
     - Study hard = Usually get A's
     - But sometimes you get a B
@@ -116,27 +116,27 @@ SIMPLE_EXPLANATIONS = {
     """,
     "what_is_bankroll": """
     🏦 **What is "Bankroll"? (Your Betting Piggy Bank)**
-    
+
     Your bankroll is like your video game money:
     - You start with $100
     - Win a bet = Money goes UP! 💰
     - Lose a bet = Money goes DOWN 📉
     - Game over = When you run out
-    
+
     **IMPORTANT RULES:**
-    
+
     1️⃣ **Never bet all your money at once!**
        - Like don't spend all your allowance on one toy
        - Spread it out over many bets
-    
+
     2️⃣ **Small bets are smart**
        - If you have $100, bet $5-$10 max
        - This way if you lose, you can try again
-    
+
     3️⃣ **Add money slowly**
        - When you win, your bankroll grows
        - When it grows, you can bet a bit more
-    
+
     **Think of it like:**
     - Your bankroll = Your game lives
     - Each bet = A level in the game
@@ -157,16 +157,16 @@ AI_PLATFORMS = {
         "signup_url": "https://chat.openai.com/",
         "how_to": """
         **How to get ChatGPT (FREE!):**
-        
+
         1. Go to chat.openai.com
         2. Click "Sign Up"
         3. Use your email or Google account
         4. Done! You have ChatGPT!
-        
+
         **What it costs:**
         - ChatGPT-3.5 = FREE forever!
         - ChatGPT-4 = $20/month (better but optional)
-        
+
         **For betting:**
         - Free version works fine!
         - Upgrade only if you want faster/smarter answers
@@ -181,16 +181,16 @@ AI_PLATFORMS = {
         "signup_url": "https://claude.ai/",
         "how_to": """
         **How to get Claude (FREE!):**
-        
+
         1. Go to claude.ai
         2. Click "Get Started"
         3. Sign in with Google or email
         4. Done! You have Claude!
-        
+
         **What it costs:**
         - Claude = FREE with limits
         - Claude Pro = $20/month (more usage)
-        
+
         **For betting:**
         - Free version is perfect!
         - Very good at finding risks in bets
@@ -205,15 +205,15 @@ AI_PLATFORMS = {
         "signup_url": "https://gemini.google.com/",
         "how_to": """
         **How to get Gemini (FREE!):**
-        
+
         1. Go to gemini.google.com
         2. Sign in with your Gmail
         3. That's it! You're done!
-        
+
         **What it costs:**
         - Completely FREE!
         - No paid version needed
-        
+
         **For betting:**
         - Best free option
         - Very fast responses
@@ -229,15 +229,15 @@ AI_PLATFORMS = {
         "signup_url": "https://x.com/i/grok",
         "how_to": """
         **How to get Grok:**
-        
+
         1. Have an X (Twitter) account
         2. Subscribe to X Premium ($8/month)
         3. Grok is included!
-        
+
         **What it costs:**
         - X Premium = $8/month
         - Grok is part of that
-        
+
         **For betting:**
         - Fun and edgy responses
         - Good for second opinions
@@ -253,16 +253,16 @@ AI_PLATFORMS = {
         "signup_url": "https://www.perplexity.ai/",
         "how_to": """
         **How to get Perplexity (FREE!):**
-        
+
         1. Go to perplexity.ai
         2. Click "Sign Up"
         3. Use email or Google
         4. Start asking!
-        
+
         **What it costs:**
         - FREE forever
         - Pro = $20/month (optional)
-        
+
         **For betting:**
         - Shows sources (like Wikipedia)
         - Good for checking team stats
@@ -303,7 +303,7 @@ def show_simple_ai_setup():
                 if platform["free"]:
                     st.success("✅ **FREE** - No credit card needed!")
                 else:
-                    st.warning(f"💰 Requires subscription")
+                    st.warning("💰 Requires subscription")
 
                 # How to get it
                 with st.expander(f"📖 How to get {platform['name']}", expanded=False):
@@ -330,13 +330,13 @@ def show_simple_ai_setup():
     st.markdown("### 🎯 Recommendation for Beginners:")
     st.info("""
     **Get these 3 (all FREE!):**
-    
+
     1. **Gemini** 🔵 - Easiest (just use your Gmail!)
     2. **ChatGPT** 🟢 - Most popular
     3. **Claude** 🟣 - Great for double-checking
-    
+
     **Time needed:** 5 minutes total
-    
+
     **Cost:** $0 (completely free!)
     """)
 
@@ -371,10 +371,10 @@ def show_ai_status_simple():
     if not connected_ais:
         st.warning("""
         ⚠️ **No AI helpers connected yet!**
-        
+
         **What this means:**
         You won't get smart bet advice from AI.
-        
+
         **What to do:**
         Click the button below to set up your free AI accounts!
         (Takes 5 minutes, costs $0)
@@ -387,9 +387,9 @@ def show_ai_status_simple():
     else:
         st.success(f"""
         ✅ **{len(connected_ais)} AI helpers ready!**
-        
+
         Connected: {', '.join(connected_ais)}
-        
+
         **What this means:**
         Your bets will have smart AI analysis!
         """)
@@ -445,7 +445,7 @@ def show_eli10_helper():
     if custom_q and st.button("Get Simple Answer"):
         st.info("""
         🤖 **AI Simple Explainer:**
-        
+
         I'll answer this in the simplest way possible!
         (This feature uses your connected AI accounts)
         """)
@@ -477,7 +477,7 @@ def check_ai_quality_simple(prediction_confidence: float, edge: float) -> dict:
             **Think of it like this:**
             You're guessing if it will rain tomorrow, but you're only 52% sure.
             That's basically a coin flip! Not very helpful.
-            
+
             **What to do:**
             Skip this bet. Wait for one where AI is more confident (60%+ is better).
             """,
@@ -495,7 +495,7 @@ def check_ai_quality_simple(prediction_confidence: float, edge: float) -> dict:
             **Imagine:**
             You're selling lemonade for $1, but it costs you $0.99 to make.
             Sure, you make 1 cent profit, but is it worth it?
-            
+
             **What to do:**
             Look for bets with bigger edge (3%+ is better).
             Small edges aren't worth the risk!
@@ -515,12 +515,12 @@ def check_ai_quality_simple(prediction_confidence: float, edge: float) -> dict:
             **This is like:**
             Being 100% sure your team will win, but the prize is only 10 cents.
             If you're so sure, the prize should be bigger!
-            
+
             **What might be wrong:**
             - Sportsbook might know something we don't
             - AI might be overconfident
             - Line might have moved
-            
+
             **What to do:**
             Be extra careful. Maybe skip this one.
             """,
@@ -536,13 +536,13 @@ def check_ai_quality_simple(prediction_confidence: float, edge: float) -> dict:
                 "problem": None,
                 "simple_explanation": """
             **Great news!**
-            
+
             ✅ AI is confident (like being sure it's pizza for dinner!)
             ✅ Edge is good (unfair game in your favor!)
             ✅ Everything checks out!
-            
+
             **This is a QUALITY bet!**
-            
+
             (But remember: Even good bets lose sometimes. That's normal!)
             """,
                 "emoji": "🎯",

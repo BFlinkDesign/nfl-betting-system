@@ -12,21 +12,12 @@ Features:
 - Bulldog system controls
 """
 
-import base64
-import hashlib
-import json
 import secrets
 import sys
-from datetime import datetime, timedelta
-from io import BytesIO
 from pathlib import Path
 
-import pandas as pd
-import plotly.graph_objects as go
 import pyotp
-import qrcode
 import streamlit as st
-import streamlit.components.v1 as components
 
 # Add project root
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -53,8 +44,26 @@ st.set_page_config(
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+import os
+
+
+def _get_stable_secret_key() -> str:
+    """Return a stable JWT secret key, persisted to disk if not set via env."""
+    env_key = os.environ.get("JWT_SECRET_KEY")
+    if env_key:
+        return env_key
+    secret_path = Path(__file__).parent.parent / "data" / ".jwt_secret"
+    secret_path.parent.mkdir(parents=True, exist_ok=True)
+    if secret_path.exists():
+        return secret_path.read_text().strip()
+    new_key = secrets.token_urlsafe(32)
+    secret_path.touch(mode=0o600, exist_ok=True)
+    secret_path.write_text(new_key)
+    return new_key
+
+
 # JWT settings
-SECRET_KEY = "your-secret-key-here-change-in-production"
+SECRET_KEY = _get_stable_secret_key()
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 

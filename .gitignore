@@ -44,11 +44,14 @@ data/
 !.secrets.baseline
 !.claude/settings.json
 
-# Models
-models/
+# Models (trained artifacts; keep source under src/models/)
+/models/
 *.pkl
 *.joblib
 *.h5
+# Allow source model code (src/models/*.py are tracked source, not artifacts)
+!src/models/
+!src/models/*.py
 
 # Reports
 reports/
@@ -80,6 +83,7 @@ config/api_keys.env
 
 # Secrets
 dashboard/.streamlit/secrets.toml
+data/.jwt_secret
 
 # Backups (auto-generated)
 backups/

@@ -114,28 +114,28 @@ def _create_simple_summary(reasons: List[Dict]) -> str:
     if positive_count >= 4:
         return """
         🎯 **STRONG BET!**
-        
+
         Almost everything is going our way! Like when all the stars align.
         This is the kind of bet we LOVE to see!
         """
     elif positive_count == 3:
         return """
         ✅ **GOOD BET**
-        
+
         More things helping than hurting. Like having more friends on your team.
         Solid opportunity!
         """
     elif positive_count == 2:
         return """
         🤔 **OKAY BET**
-        
+
         Some good, some bad. Like a coin flip with a slight edge.
         Proceed with caution!
         """
     else:
         return """
         ⚠️ **RISKY BET**
-        
+
         More things working against us than for us.
         Maybe skip this one and wait for a better opportunity!
         """
@@ -149,45 +149,45 @@ def _explain_confidence_simply(bet_info: Dict) -> str:
     if confidence >= 70:
         return """
         **Confidence: VERY HIGH (70%+)**
-        
+
         Think of it like:
         - 7 out of 10 times, we win this bet
         - Like your favorite Pokemon having type advantage
         - Pretty darn confident!
-        
+
         But remember: Even 70% means we lose 3 out of 10 times. That's normal!
         """
     elif confidence >= 60:
         return """
         **Confidence: HIGH (60-70%)**
-        
+
         Think of it like:
         - 6 out of 10 times, we win
         - Like a good student's chance of getting an A
         - Strong bet, but not guaranteed
-        
+
         Remember: 60% ≠ 100%! Losses will happen.
         """
     elif confidence >= 55:
         return """
         **Confidence: MEDIUM (55-60%)**
-        
+
         Think of it like:
         - Slightly better than a coin flip
         - Like guessing heads/tails but with a weighted coin
         - Small edge, be careful with bet size
-        
+
         These can be good if the odds are right!
         """
     else:
         return """
         **Confidence: LOW (Under 55%)**
-        
+
         Think of it like:
         - Basically a coin flip
         - Like guessing random trivia questions
         - Not enough edge to bet confidently
-        
+
         **Recommendation:** Skip this and find a better bet!
         """
 
@@ -314,11 +314,11 @@ class SimpleRAG:
                 ],
                 "simple_answer": """
                 **How Much Should I Bet?**
-                
+
                 Easy formula:
                 - Total money ÷ 20 = Max bet per game
                 - Example: $100 ÷ 20 = $5 max bet
-                
+
                 Why so small?
                 - Protects you from losing everything
                 - Let's you make many bets (more chances to win)
@@ -335,13 +335,13 @@ class SimpleRAG:
                 ],
                 "simple_answer": """
                 **What's a Good Win Rate?**
-                
+
                 Think of it like batting average in baseball:
                 - 50% = Coin flip (break even)
                 - 55% = Good! (like getting B's in school)
                 - 60% = Great! (like getting A's)
                 - 65%+ = Amazing! (like being top of class)
-                
+
                 Our AI targets 60-67% win rate.
                 That means winning 6-7 out of every 10 bets!
                 """,
@@ -356,15 +356,15 @@ class SimpleRAG:
                 ],
                 "simple_answer": """
                 **What is 'Value' in Betting?**
-                
+
                 Imagine a vending machine:
                 - Normal: Pay $1, get $1 candy (fair)
                 - VALUE: Pay $1, sometimes get $1.50 candy!
-                
+
                 That's value betting! When you bet $10:
                 - Fair bet: Sometimes win $10, sometimes lose $10
                 - Value bet: Sometimes win $12, sometimes lose $10
-                
+
                 Over time, that extra $2 adds up to big profit!
                 """,
             },
@@ -384,12 +384,12 @@ class SimpleRAG:
         # No match found
         return """
         🤔 **Hmm, I'm not sure about that specific question.**
-        
+
         Try asking about:
         - Bankroll management (how much to bet)
         - Win rates (how often should I win?)
         - Value betting (what is edge/value?)
-        
+
         Or rephrase your question and I'll try again!
         """
 

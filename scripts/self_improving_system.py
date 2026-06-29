@@ -15,8 +15,8 @@ import pandas as pd
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from scripts.download_data import download_all_data
 from scripts.performance_tracker import PerformanceTracker
+from src.data_pipeline import NFLDataPipeline
 from src.features.pipeline import create_features
 
 logging.basicConfig(level=logging.INFO)
@@ -79,15 +79,15 @@ class SelfImprovingSystem:
 
         try:
             # Download new data
-            download_all_data()
+            pipeline = NFLDataPipeline()
+            pipeline.download_all(seasons=list(range(2016, 2025)))
             logger.info("[OK] Data updated successfully")
 
             # Regenerate features
             logger.info("\nRegenerating features...")
             create_features(
-                start_season=2016,
-                end_season=2024,
-                output_file="data/processed/features_2016_2024_improved.parquet",
+                seasons=list(range(2016, 2025)),
+                output_path="data/processed/features_2016_2024_improved.parquet",
             )
             logger.info("[OK] Features regenerated")
 

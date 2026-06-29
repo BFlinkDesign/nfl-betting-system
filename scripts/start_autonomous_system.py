@@ -7,12 +7,22 @@ Starts all agents, swarms, and monitoring systems.
 
 import asyncio
 import logging
+import os
 import signal
 import sys
 from pathlib import Path
 
-# Add project root to path
 sys.path.append(str(Path(__file__).parent.parent))
+
+from src.config.logging_config import setup_logging
+from src.config.startup import startup_check
+from src.utils.leader_lease import LeaderLease
+
+setup_logging(
+    level=os.environ.get("LOG_LEVEL", "INFO"),
+    json_format=os.environ.get("LOG_FORMAT") == "json",
+)
+logger = logging.getLogger(__name__)
 
 from agents.api_integrations import TheOddsAPI
 from src.agents import (
@@ -38,11 +48,6 @@ from src.backtesting.ai_orchestrator import AIBacktestOrchestrator
 from src.self_healing import AnomalyDetector, AutoRemediation, MonitoringLayer
 from src.swarms import ConsensusSwarm, StrategyGenerationSwarm, ValidationSwarm
 from src.utils.odds_cache import OddsCache
-
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
 
 
 class AutonomousSystem:
@@ -173,23 +178,47 @@ class AutonomousSystem:
 
 
 async def main():
-    """Main entry point."""
+    """Main entry point with startup validation, leader lease, and graceful shutdown."""
+    if not startup_check():
+        logger.error("Startup checks failed — aborting")
+        sys.exit(1)
+
+    lease = LeaderLease("autonomous_system", ttl_seconds=120)
+    if not lease.acquire():
+        logger.error("Another instance is running — aborting (lease held)")
+        sys.exit(1)
+
     system = AutonomousSystem()
+    shutdown_event = asyncio.Event()
 
-    # Handle shutdown signals
-    def signal_handler(sig, frame):
-        logger.info("Shutdown signal received")
-        asyncio.create_task(system.stop())
-        sys.exit(0)
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, shutdown_event.set)
 
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    async def _lease_renewer():
+        while not shutdown_event.is_set():
+            lease.renew()
+            await asyncio.sleep(30)
+
+    renew_task = asyncio.create_task(_lease_renewer())
 
     try:
-        await system.start()
-    except KeyboardInterrupt:
-        logger.info("Keyboard interrupt received")
+        start_task = asyncio.create_task(system.start())
+        shutdown_wait = asyncio.create_task(shutdown_event.wait())
+
+        done, pending = await asyncio.wait(
+            [start_task, shutdown_wait], return_when=asyncio.FIRST_COMPLETED
+        )
+
+        if shutdown_event.is_set():
+            logger.info("Shutdown signal received — stopping gracefully")
+    except Exception as e:
+        logger.error("Unhandled error in main: %s", e, exc_info=True)
+    finally:
+        renew_task.cancel()
         await system.stop()
+        lease.release()
+        logger.info("Autonomous system exited cleanly")
 
 
 if __name__ == "__main__":

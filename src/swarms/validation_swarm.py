@@ -67,14 +67,14 @@ class ValidationSwarm(SwarmBase):
 
         decision = await self.make_decision(task)
 
-        # Rejection criteria: ROI < 5%, win_rate < 53%, max_drawdown > 20%
         if decision.decision:
-            metrics = strategy.get("metrics", {})
-            if metrics.get("roi", 0) < 0.05:
+            avg_roi = cross_validated.get("roi_mean", 0)
+            avg_wr = cross_validated.get("win_rate_mean", 0)
+            if avg_roi < 5.0:
                 decision.decision = False
-            if metrics.get("win_rate", 0) < 0.53:
+            if avg_wr < 53.0:
                 decision.decision = False
-            if metrics.get("max_drawdown", 0) > 0.20:
+            if not stress_tested.get("passed", False):
                 decision.decision = False
 
         return {
@@ -126,11 +126,10 @@ class ValidationSwarm(SwarmBase):
                     # Run backtest
                     metrics, _ = self.backtest_engine.run_backtest(predictions_df)
 
-                    # Check if meets minimum thresholds
                     passed = (
-                        metrics["roi"] >= 0.05
-                        and metrics["win_rate"] >= 0.53
-                        and metrics.get("max_drawdown", 1.0) <= 0.20
+                        metrics["roi"] >= 5.0
+                        and metrics["win_rate"] >= 53.0
+                        and metrics.get("max_drawdown", -100.0) >= -20.0
                     )
 
                     result = {
@@ -159,9 +158,77 @@ class ValidationSwarm(SwarmBase):
         return results
 
     async def _cross_validation(self, results: List[Dict]) -> Dict[str, Any]:
-        """Cross-validate results."""
-        return {"consistent": True, "discrepancies": []}
+        """Detect discrepancies across agent backtest results."""
+        valid = [r for r in results if "error" not in r]
+        if len(valid) < 2:
+            roi_mean = float(valid[0]["roi"]) if valid else 0.0
+            wr_mean = float(valid[0]["win_rate"]) if valid else 0.0
+            return {
+                "consistent": True,
+                "discrepancies": [],
+                "n_valid": len(valid),
+                "roi_mean": roi_mean,
+                "win_rate_mean": wr_mean,
+            }
+
+        rois = [r["roi"] for r in valid]
+        win_rates = [r["win_rate"] for r in valid]
+
+        import numpy as _np
+
+        roi_std = float(_np.std(rois))
+        wr_std = float(_np.std(win_rates))
+
+        discrepancies = []
+        if roi_std > 10.0:
+            discrepancies.append(f"ROI spread too wide: std={roi_std:.1f}%")
+        if wr_std > 8.0:
+            discrepancies.append(f"Win-rate spread too wide: std={wr_std:.1f}%")
+
+        return {
+            "consistent": len(discrepancies) == 0,
+            "discrepancies": discrepancies,
+            "roi_mean": float(_np.mean(rois)),
+            "roi_std": roi_std,
+            "win_rate_mean": float(_np.mean(win_rates)),
+            "win_rate_std": wr_std,
+            "n_valid": len(valid),
+        }
 
     async def _stress_testing(self, strategy: Dict) -> Dict[str, Any]:
-        """Stress test strategy."""
-        return {"passed": True, "worst_case_roi": 0.02}
+        """Run Monte Carlo stress test via BacktestEngine."""
+        current_year = datetime.now().year
+        data_period = {
+            "start_year": current_year - 3,
+            "end_year": current_year - 1,
+            "focus": "full",
+        }
+
+        try:
+            schedules_df, pbp_df = self.data_loader.get_backtest_data(data_period)
+            predictions_df = self.prediction_generator.generate_predictions(
+                schedules_df, strategy, pbp_df
+            )
+
+            if len(predictions_df) == 0:
+                return {"passed": False, "error": "No predictions for stress test"}
+
+            mc_results = self.backtest_engine.run_monte_carlo(
+                predictions_df, n_simulations=500
+            )
+
+            passed = (
+                mc_results.get("prob_profitable", 0) >= 0.60
+                and mc_results.get("roi_ci_5", -100) > -20.0
+            )
+
+            return {
+                "passed": passed,
+                "prob_profitable": mc_results.get("prob_profitable", 0),
+                "worst_case_roi": mc_results.get("roi_ci_5", 0),
+                "median_roi": mc_results.get("roi_median", 0),
+                "n_simulations": mc_results.get("n_simulations", 0),
+            }
+        except Exception as e:
+            logger.error("Stress testing failed: %s", e)
+            return {"passed": False, "error": str(e)}

@@ -46,7 +46,7 @@ st.markdown(
 <style>
     /* Beautiful modern design */
     .main {padding: 1rem;}
-    
+
     .metric-card {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         padding: 1.5rem;
@@ -54,13 +54,13 @@ st.markdown(
         color: white;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
-    
+
     .stButton>button {
         border-radius: 8px;
         padding: 0.5rem 2rem;
         font-weight: 600;
     }
-    
+
     .auth-container {
         max-width: 450px;
         margin: 2rem auto;
@@ -484,7 +484,7 @@ def show_picks_page(user):
             col_a, col_b = st.columns([1, 3])
             with col_a:
                 if st.button(
-                    f"✅ Track Bet",
+                    "✅ Track Bet",
                     key=f"track_{idx}_{pick['game']}",
                     use_container_width=True,
                 ):
@@ -682,7 +682,7 @@ def show_bankroll_page(user):
     info = profile_info[profile]
     st.info(f"""
     **{info['desc']}**
-    
+
     - Bet Range: {info['bet_range']}
     - Target ROI: {info['target_roi']}
     - Risk of Ruin: {info['risk_of_ruin']}

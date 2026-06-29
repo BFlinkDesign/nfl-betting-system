@@ -162,12 +162,12 @@ class OddsCache:
 
         # Indexes for fast queries
         cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_game_time 
+            CREATE INDEX IF NOT EXISTS idx_game_time
             ON odds_snapshots(game_id, fetch_timestamp)
         """)
 
         cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_commence 
+            CREATE INDEX IF NOT EXISTS idx_commence
             ON odds_snapshots(commence_time)
         """)
 
@@ -513,7 +513,7 @@ class OddsCache:
 
             cursor.execute(
                 """
-                SELECT 
+                SELECT
                     fetch_timestamp,
                     bookmaker,
                     spread_line,

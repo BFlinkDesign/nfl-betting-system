@@ -296,7 +296,7 @@ class SandboxTester:
             print("  [OK] All APIs initialized")
 
             # Test favorites filter flag
-            assert generator.favorites_only == True, "Favorites-only flag not set"
+            assert generator.favorites_only is True, "Favorites-only flag not set"
             print("  [OK] Favorites-only filter enabled")
 
         except Exception as e:

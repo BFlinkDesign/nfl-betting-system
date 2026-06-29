@@ -138,42 +138,62 @@ class OrchestratorAgent(BaseAgent):
             await self._handle_authority_request(message)
 
     async def _evaluate_proposal(self, message: AgentMessage):
-        """Evaluate a proposal from another agent."""
+        """Evaluate a proposal — reject if missing required fields."""
         proposal = message.content.get("proposal", {})
-        logger.info(
-            f"Evaluating proposal from {message.sender_id}: {proposal.get('type', 'unknown')}"
+        proposal_type = proposal.get("type", "unknown")
+        logger.info("Evaluating proposal from %s: %s", message.sender_id, proposal_type)
+
+        approved = True
+        reason = "Approved"
+
+        if not proposal.get("type"):
+            approved = False
+            reason = "Rejected: missing proposal type"
+
+        metrics = proposal.get("metrics", {})
+        if metrics.get("roi", 100) < 0:
+            approved = False
+            reason = f"Rejected: negative ROI ({metrics.get('roi')})"
+
+        self.decisions.append(
+            {
+                "timestamp": datetime.now().isoformat(),
+                "type": "proposal_review",
+                "source_agent": message.sender_id,
+                "approved": approved,
+                "reason": reason,
+            }
         )
 
-        # Decision logic would go here
-        # For now, approve by default
         response = AgentMessage(
             sender_id=self.agent_id,
             receiver_id=message.sender_id,
             message_type="response",
-            content={"approved": True, "reason": "Default approval"},
+            content={"approved": approved, "reason": reason},
             parent_id=message.message_id,
         )
         await message_bus.send(response)
 
     async def _handle_alert(self, message: AgentMessage):
-        """Handle alert from agent."""
+        """Handle alert — log and escalate critical alerts."""
         alert = message.content.get("alert", {})
         severity = alert.get("severity", "info")
+        alert_msg = alert.get("message", "Unknown")
 
-        logger.warning(
-            f"Alert from {message.sender_id}: {alert.get('message', 'Unknown')}"
-        )
-
-        # Take action based on severity
         if severity == "critical":
-            # Immediate action required
-            pass
+            logger.critical("CRITICAL alert from %s: %s", message.sender_id, alert_msg)
+            pause_cmd = AgentMessage(
+                sender_id=self.agent_id,
+                receiver_id=message.sender_id,
+                message_type="command",
+                content={"action": "pause", "reason": f"Critical alert: {alert_msg}"},
+            )
+            await message_bus.send(pause_cmd)
+        else:
+            logger.warning("Alert from %s: %s", message.sender_id, alert_msg)
 
     async def _handle_authority_request(self, message: AgentMessage):
-        """Handle request for authority override."""
-        request = message.content.get("request", {})
-
-        # Grant or deny authority
+        """Handle request for authority override — grant standard only."""
         response = AgentMessage(
             sender_id=self.agent_id,
             receiver_id=message.sender_id,
@@ -183,25 +203,18 @@ class OrchestratorAgent(BaseAgent):
         )
         await message_bus.send(response)
 
-    def override_decision(self, agent_id: str, decision: Dict[str, Any]):
-        """
-        Override an agent's decision (orchestrator authority).
-
-        Args:
-            agent_id: Agent whose decision to override
-            decision: New decision
-        """
+    async def override_decision(self, agent_id: str, decision: Dict[str, Any]):
+        """Override an agent's decision (orchestrator authority)."""
         command = AgentMessage(
             sender_id=self.agent_id,
             receiver_id=agent_id,
             message_type="command",
             content={"action": "override", "decision": decision},
         )
-        message_bus.send(command)
+        await message_bus.send(command)
 
-        logger.info(f"Orchestrator overriding decision from {agent_id}")
+        logger.info("Orchestrator overriding decision from %s", agent_id)
 
-        # Record override
         self.decisions.append(
             {
                 "timestamp": datetime.now().isoformat(),

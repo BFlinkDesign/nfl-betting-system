@@ -56,7 +56,7 @@ st.markdown(
     """
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
-    
+
     :root {
         --lab-green: #22c55e;
         --lab-blue: #3b82f6;
@@ -66,16 +66,16 @@ st.markdown(
         --lab-dark: #0a0f1a;
         --lab-card: #111827;
     }
-    
+
     html, body, .stApp {
         background: linear-gradient(135deg, #0a0f1a 0%, #0f172a 50%, #1a1a2e 100%);
         color: #e2e8f0;
         font-family: 'Inter', sans-serif;
     }
-    
+
     #MainMenu, footer, header {visibility: hidden;}
     .block-container { padding: 1rem 2rem; max-width: 100%; }
-    
+
     /* Animated grid background */
     .stApp::before {
         content: '';
@@ -84,14 +84,14 @@ st.markdown(
         left: 0;
         width: 100%;
         height: 100%;
-        background-image: 
+        background-image:
             linear-gradient(rgba(34, 197, 94, 0.03) 1px, transparent 1px),
             linear-gradient(90deg, rgba(34, 197, 94, 0.03) 1px, transparent 1px);
         background-size: 40px 40px;
         pointer-events: none;
         z-index: 0;
     }
-    
+
     /* Lab sections */
     .lab-section {
         background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
@@ -101,7 +101,7 @@ st.markdown(
         margin: 16px 0;
         backdrop-filter: blur(10px);
     }
-    
+
     .lab-section-header {
         font-family: 'Orbitron', sans-serif;
         font-size: 1rem;
@@ -113,7 +113,7 @@ st.markdown(
         align-items: center;
         gap: 10px;
     }
-    
+
     /* Model cards */
     .model-card {
         background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%);
@@ -123,29 +123,29 @@ st.markdown(
         margin: 8px 0;
         transition: all 0.3s ease;
     }
-    
+
     .model-card:hover {
         border-color: #22c55e;
         box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);
         transform: translateY(-2px);
     }
-    
+
     .model-card.active {
         border-color: #22c55e;
         border-width: 2px;
         box-shadow: 0 0 30px rgba(34, 197, 94, 0.3);
     }
-    
+
     /* Progress animations */
     @keyframes pulse-green {
         0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
         50% { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); }
     }
-    
+
     .running {
         animation: pulse-green 2s infinite;
     }
-    
+
     /* Console output */
     .console-output {
         background: #0a0f1a;
@@ -158,23 +158,23 @@ st.markdown(
         max-height: 400px;
         overflow-y: auto;
     }
-    
+
     .console-line {
         margin: 4px 0;
         display: flex;
         gap: 10px;
     }
-    
+
     .console-timestamp {
         color: #6b7280;
         min-width: 80px;
     }
-    
+
     .console-info { color: #3b82f6; }
     .console-success { color: #22c55e; }
     .console-warning { color: #f59e0b; }
     .console-error { color: #ef4444; }
-    
+
     /* Metrics grid */
     .metrics-grid {
         display: grid;
@@ -182,7 +182,7 @@ st.markdown(
         gap: 16px;
         margin: 16px 0;
     }
-    
+
     .metric-box {
         background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
         border: 1px solid #374151;
@@ -190,7 +190,7 @@ st.markdown(
         padding: 16px;
         text-align: center;
     }
-    
+
     .metric-label {
         font-family: 'Orbitron', sans-serif;
         font-size: 0.65rem;
@@ -198,7 +198,7 @@ st.markdown(
         letter-spacing: 1px;
         text-transform: uppercase;
     }
-    
+
     .metric-value {
         font-family: 'Orbitron', sans-serif;
         font-size: 1.5rem;
@@ -206,10 +206,10 @@ st.markdown(
         color: #fff;
         margin-top: 4px;
     }
-    
+
     .metric-value.positive { color: #22c55e; }
     .metric-value.negative { color: #ef4444; }
-    
+
     /* Tabs styling */
     .stTabs [data-baseweb="tab-list"] {
         background: linear-gradient(180deg, #1f2937 0%, #111827 100%);
@@ -218,7 +218,7 @@ st.markdown(
         gap: 4px;
         border: 1px solid #374151;
     }
-    
+
     .stTabs [data-baseweb="tab"] {
         background: transparent;
         border-radius: 8px;
@@ -229,13 +229,13 @@ st.markdown(
         font-size: 0.75rem;
         letter-spacing: 1px;
     }
-    
+
     .stTabs [aria-selected="true"] {
         background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%) !important;
         color: white !important;
         box-shadow: 0 0 20px rgba(34, 197, 94, 0.4);
     }
-    
+
     /* Button overrides */
     .stButton > button {
         font-family: 'Orbitron', sans-serif;
@@ -243,14 +243,14 @@ st.markdown(
         font-weight: 600;
         border-radius: 8px;
     }
-    
+
     /* Select box */
     .stSelectbox > div > div {
         background: rgba(30, 41, 59, 0.8);
         border: 1px solid #374151;
         border-radius: 8px;
     }
-    
+
     /* Number input */
     .stNumberInput > div > div > input {
         background: rgba(30, 41, 59, 0.8);
@@ -258,7 +258,7 @@ st.markdown(
         border-radius: 8px;
         color: #e2e8f0;
     }
-    
+
     /* Status indicators */
     .status-indicator {
         display: inline-block;
@@ -267,7 +267,7 @@ st.markdown(
         border-radius: 50%;
         margin-right: 8px;
     }
-    
+
     .status-ready { background: #22c55e; box-shadow: 0 0 10px #22c55e; }
     .status-running { background: #3b82f6; animation: pulse-green 1s infinite; }
     .status-error { background: #ef4444; }
@@ -1059,7 +1059,7 @@ st.markdown("---")
 st.markdown(
     """
     <div style="text-align: center; color: #64748b; font-size: 0.8rem; padding: 20px;">
-        <span style="font-family: Orbitron;">GAMELOCK AI</span> • THE LAB • 
+        <span style="font-family: Orbitron;">GAMELOCK AI</span> • THE LAB •
         Walk-forward backtesting powered by real ML models
     </div>
 """,

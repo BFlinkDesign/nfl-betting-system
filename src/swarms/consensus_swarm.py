@@ -165,8 +165,34 @@ class ConsensusSwarm(SwarmBase):
         return picks
 
     async def _deliberation_phase(self, picks: List[Dict]) -> List[Dict]:
-        """Agents deliberate and refine picks."""
-        return picks
+        """
+        Agents deliberate: when an agent's pick disagrees with the majority
+        AND has low confidence, adjust confidence toward the consensus view.
+        """
+        if len(picks) < 3:
+            return picks
+
+        vote_counts: Dict[str, int] = {}
+        for p in picks:
+            v = p.get("pick", "home")
+            vote_counts[v] = vote_counts.get(v, 0) + 1
+
+        majority_pick = max(vote_counts, key=vote_counts.get)
+        majority_pct = vote_counts[majority_pick] / len(picks)
+
+        refined = []
+        for p in picks:
+            p = dict(p)
+            if p.get("pick") != majority_pick and p.get("confidence", 0) < 0.55:
+                if majority_pct >= 0.70:
+                    p["confidence"] = p.get("confidence", 0.5) * 0.7
+                    p["deliberation_note"] = "low-conf minority, confidence dampened"
+            elif p.get("pick") == majority_pick and majority_pct >= 0.80:
+                p["confidence"] = min(p.get("confidence", 0.5) * 1.1, 1.0)
+                p["deliberation_note"] = "high-consensus majority, confidence boosted"
+            refined.append(p)
+
+        return refined
 
     async def _voting_phase(self, picks: List[Dict]) -> Dict[str, Any]:
         """Weighted voting."""
