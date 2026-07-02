@@ -1,5 +1,5 @@
 # Core Dependencies
-nflreadpy>=0.1.0
+nflreadpy>=0.1.5
 polars>=0.20.0
 pandas>=2.0.0
 pyarrow>=12.0.0
