@@ -32,14 +32,23 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install -r requirements-dev.txt
 
-      - name: Apply explicit import-boundary hardening
+      - name: Apply explicit compatibility and import-boundary hardening
         shell: python
         run: |
           from pathlib import Path
 
-          path = Path("scripts/bulldog_edge_discovery.py")
-          text = path.read_text(encoding="utf-8")
-          old = '''PROJECT_ROOT = Path(__file__).resolve().parent.parent
+          def replace_once(path: Path, old: str, new: str) -> None:
+              text = path.read_text(encoding="utf-8")
+              if new in text:
+                  return
+              if old not in text:
+                  raise SystemExit(
+                      f"Expected source block was not found in {path}; refusing to guess"
+                  )
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          bulldog_path = Path("scripts/bulldog_edge_discovery.py")
+          bulldog_old = '''PROJECT_ROOT = Path(__file__).resolve().parent.parent
           sys.path.insert(0, str(PROJECT_ROOT))
 
           import pandas as pd
@@ -48,7 +57,7 @@ jobs:
           from src.discovery_validation import benjamini_hochberg, wilson_lower_bound
           from src.strategy_registry import StrategyRegistry
           '''
-          new = '''import pandas as pd
+          bulldog_new = '''import pandas as pd
           from scipy import stats
 
           PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -57,9 +66,31 @@ jobs:
           from src.discovery_validation import benjamini_hochberg, wilson_lower_bound  # noqa: E402
           from src.strategy_registry import StrategyRegistry  # noqa: E402
           '''
-          if old not in text:
-              raise SystemExit("Expected Bulldog import block was not found; refusing to guess")
-          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          current_bulldog = bulldog_path.read_text(encoding="utf-8")
+          if "# noqa: E402" not in current_bulldog:
+              replace_once(bulldog_path, bulldog_old, bulldog_new)
+
+          registry_path = Path("src/strategy_registry.py")
+          registry_old = '''            base_id = re.sub(r"_v\\d+$", "", original.strategy_id)
+          new_id = f"{base_id}_v{new_version}"
+          if new_id in self.strategies:
+              return False, f"Strategy ID {new_id} already exists"
+
+          new_strategy = Strategy(
+              strategy_id=new_id,
+              name=f"{re.sub(r' \\(v\\d+\\)$', '', original.name)} (v{new_version})",
+          '''
+          registry_new = '''            base_id = re.sub(r"_v\\d+$", "", original.strategy_id)
+          new_id = f"{base_id}_v{new_version}"
+          if new_id in self.strategies:
+              return False, f"Strategy ID {new_id} already exists"
+
+          base_name = re.sub(r" \\(v\\d+\\)$", "", original.name)
+          new_strategy = Strategy(
+              strategy_id=new_id,
+              name=f"{base_name} (v{new_version})",
+          '''
+          replace_once(registry_path, registry_old, registry_new)
 
       - name: Apply pinned formatters to the bounded change set
         run: |
@@ -102,7 +133,7 @@ jobs:
             tail -n 200 /tmp/hardening-full-suite.log
           } > .ci-hardening-full-suite.txt
 
-      - name: Commit deterministic formatter and diagnostic output
+      - name: Commit deterministic compatibility, formatter, and diagnostic output
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -115,8 +146,8 @@ jobs:
             tests/test_bulldog_edge_discovery.py \
             .ci-hardening-full-suite.txt
           if git diff --cached --quiet; then
-            echo "No formatter or diagnostic changes required."
+            echo "No compatibility, formatter, or diagnostic changes required."
           else
-            git commit -m "style: format hardening changes and capture CI evidence"
+            git commit -m "fix: restore Python 3.10 and 3.11 compatibility"
             git push origin HEAD:codex/intel-alignment-hardening-20260716
           fi
