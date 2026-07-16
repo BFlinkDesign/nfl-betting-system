@@ -31,7 +31,7 @@ The system may not:
 - represent any historical metric as verified current performance without a commit-bound artifact;
 - auto-promote a discovered association into a deployable strategy;
 - calculate betting ROI from assumed universal prices;
-- authorize live betting from a model score, p-value, chat conclusion, or operator “accept” click;
+- authorize live betting from a model score, p-value, chat conclusion, skill, generated prompt, or operator “accept” click;
 - place or instruct real-money bets as though profitability were established.
 
 ## Evidence maturity
@@ -58,19 +58,23 @@ Every performance claim used for a decision must include:
 - model class, hyperparameters, random seeds, and model digest;
 - market, sportsbook/source, line, price, timestamp, and push rules;
 - predefined decision thresholds and risk policy;
-- complete bet ledger, not only aggregate metrics;
+- complete bet ledger, including passes and no-bets, not only selected wagers;
 - calibration metrics, uncertainty intervals, drawdown, and sensitivity analysis;
 - command or workflow required to reproduce the result;
 - test and CI evidence for the evaluated commit.
 
-A markdown statement without this bundle is a claim, not verification.
+A markdown statement, chat response, skill, or generated architecture without this bundle is a claim, not verification.
 
 ## Current P0 controls
 
 1. The Strategy Registry fails closed on corruption, persists atomically, detects competing writers, validates records, and separates review status from evidence maturity.
 2. Bulldog discovery is research-only, applies multiple-testing correction, reports uncertainty, omits fabricated ROI, and performs zero registry writes.
 3. README and agent instructions reject historical “production ready” language as current authority.
-4. Historical Claude/Chat/Codex artifacts are treated as provenance and design input, not execution proof.
+4. Historical Claude/Chat/Codex artifacts, skills, and generated prompts are provenance or hypotheses—not execution proof.
+5. Market decisions require exact hashed snapshots, fresh prices, versioned estimates, pre-event cutoffs, probability lower bounds, and deterministic receipts.
+6. Parlay paper candidates require one exact same-book offer and a distinct validated joint-probability estimate; marginal multiplication cannot authorize a candidate.
+7. Kelly favorite multipliers, hot-streak bonuses, and ten-percent sizing are removed. Dollar sizing is blocked in paper mode.
+8. Legacy live-named pick pipelines are not authorized execution paths. Any attempt to use the former aggressive Kelly path fails closed until those scripts adopt the new decision contract and the canonical status changes.
 
 ## Release gates
 
