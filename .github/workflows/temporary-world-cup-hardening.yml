@@ -1,0 +1,107 @@
+name: Temporary World Cup decision hardening
+
+on:
+  push:
+    branches:
+      - codex/intel-alignment-hardening-20260716
+
+concurrency:
+  group: world-cup-hardening-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  apply-verify-commit:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out hardening branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: codex/intel-alignment-hardening-20260716
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Verify exact pre-change state
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object scripts/parlay_generator.py)" = "5fdad173f36c9546a235ba00f1e3d25f65747cbc"
+          test "$(git hash-object tests/test_stress.py)" = "ac9372feb8323b7f7e27b1825793c7104c2cdefc"
+          test "$(git hash-object docs/PROJECT_STATUS.md)" = "56f67a0a450ca8cc20e1c2738817c4185650c474"
+          for path in \
+            tests/test_decision_contracts.py \
+            tests/test_kelly_safety.py \
+            tests/test_evaluate_paper_decisions.py \
+            tests/test_parlay_generator.py \
+            docs/WORLD_CUP_SESSION_AUDIT_2026-07-16.md; do
+            test ! -e "$path"
+          done
+
+      - name: Reconstruct and apply deterministic payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/worldcup-hardening-payload/part* > /tmp/worldcup-hardening-payload.b64
+          base64 --decode /tmp/worldcup-hardening-payload.b64 > /tmp/worldcup-hardening-payload.tar.gz
+          echo "0f2bd6d720fb5bdf0f1738de1ea0f5a447760f523af21cd8d5542307bcfb230f  /tmp/worldcup-hardening-payload.tar.gz" | sha256sum --check --strict
+          tar -xzf /tmp/worldcup-hardening-payload.tar.gz -C .
+          rm -f /tmp/worldcup-hardening-payload.b64 /tmp/worldcup-hardening-payload.tar.gz
+
+      - name: Set up Python
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install pinned verification tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: Verify format, lint, tests, and compilation
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          files=(
+            src/betting/decision_contracts.py
+            src/betting/kelly.py
+            scripts/evaluate_paper_decisions.py
+            scripts/parlay_generator.py
+            tests/test_decision_contracts.py
+            tests/test_kelly_safety.py
+            tests/test_evaluate_paper_decisions.py
+            tests/test_parlay_generator.py
+            tests/test_stress.py
+          )
+          black --check "${files[@]}"
+          isort --check-only --profile black "${files[@]}"
+          ruff check "${files[@]}"
+          pytest -q \
+            tests/test_decision_contracts.py \
+            tests/test_kelly_safety.py \
+            tests/test_evaluate_paper_decisions.py \
+            tests/test_parlay_generator.py \
+            tests/test_stress.py
+          python -m compileall -q src scripts
+
+      - name: Commit verified hardening changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            scripts/parlay_generator.py \
+            tests/test_decision_contracts.py \
+            tests/test_kelly_safety.py \
+            tests/test_evaluate_paper_decisions.py \
+            tests/test_parlay_generator.py \
+            tests/test_stress.py \
+            docs/WORLD_CUP_SESSION_AUDIT_2026-07-16.md \
+            docs/PROJECT_STATUS.md
+          git diff --cached --check
+          git commit -m "feat(safety): harden paper decisions and parlay evidence"
+          git push origin HEAD:codex/intel-alignment-hardening-20260716
