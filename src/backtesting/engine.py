@@ -9,6 +9,7 @@ manufactured stake.
 from __future__ import annotations
 
 import math
+import re
 from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
@@ -28,6 +29,7 @@ _REQUIRED_COLUMNS = frozenset(
     }
 )
 _REQUIRED_PROVENANCE = ("source_commit", "dataset_snapshot_id", "evaluation_id")
+_COMMIT_RE = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 
 
 class BacktestContractError(ValueError):
@@ -58,6 +60,17 @@ class BacktestEngine:
             raise BacktestContractError(
                 "missing run provenance: " + ", ".join(sorted(missing))
             )
+        source_commit = str(self.config["source_commit"])
+        if not _COMMIT_RE.fullmatch(source_commit):
+            raise BacktestContractError(
+                "source_commit must be a 40- or 64-character hex digest"
+            )
+        self.config["source_commit"] = source_commit.lower()
+        for key in ("dataset_snapshot_id", "evaluation_id"):
+            value = self.config[key]
+            if not isinstance(value, str) or not value.strip():
+                raise BacktestContractError(f"{key} must be a non-empty string")
+            self.config[key] = value.strip()
 
         max_bet_pct = _finite_float(
             self.config.get("max_bet_size", 0.005), "max_bet_size"
@@ -109,9 +122,10 @@ class BacktestEngine:
                 raise BacktestContractError(
                     "odds must be decimal odds greater than one"
                 )
-            actual = int(row["actual"])
-            if actual not in {0, 1}:
-                raise BacktestContractError("actual must be 0 or 1")
+            actual_value = _finite_float(row["actual"], "actual")
+            if actual_value not in {0.0, 1.0}:
+                raise BacktestContractError("actual must be exactly 0 or 1")
+            actual = int(actual_value)
 
             fraction = self.kelly.calculate_fraction(
                 point,
@@ -198,7 +212,7 @@ class BacktestEngine:
             if len(returns) > 1 and returns.std(ddof=1) > 0
             else None
         )
-        closing_values = history_df["closing_price_value"].dropna()
+        closing_values = tracked["closing_price_value"].dropna()
         avg_closing_price_value = (
             float(closing_values.mean() * 100) if not closing_values.empty else None
         )
