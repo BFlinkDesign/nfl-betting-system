@@ -24,7 +24,6 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.evaluate_paper_decisions import evaluate_payload  # noqa: E402
-
 from src.betting.decision_contracts import (  # noqa: E402
     PAPER_AUTHORITY,
     DecisionContractError,
