@@ -11,6 +11,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from scripts.generate_daily_picks import DailyPicksGenerator
+
 from src.betting.decision_contracts import PAPER_AUTHORITY
 
 logger = logging.getLogger(__name__)
