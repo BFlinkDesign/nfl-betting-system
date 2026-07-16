@@ -1,182 +1,58 @@
-# Consolidated Project Reports
+# Consolidated Reports — Authority and Evidence Index
 
-**Last Updated**: 2025-01-27  
-**Status**: Production Ready ✅
+**Canonical status:** Research / paper-trading only. See [`PROJECT_STATUS.md`](PROJECT_STATUS.md).
 
-This document consolidates all historical reports, audits, and summaries into a single reference.
+Historical reports in this repository frequently use terms such as “complete,” “production ready,” “validated,” or “all tests passing.” Those phrases are scoped claims from prior sessions and are not current operational authority.
 
----
+## Authority classes
 
-## Table of Contents
+### Tier A — Current controlling evidence
 
-1. [Completion Summaries](#completion-summaries)
-2. [Audit Reports](#audit-reports)
-3. [Migration History](#migration-history)
-4. [Phase Reports](#phase-reports)
-5. [Deployment History](#deployment-history)
+- `docs/PROJECT_STATUS.md` — operational status and release gates.
+- `AGENTS.md` — cross-agent engineering and evidence contract.
+- Current source and tests at the evaluated commit.
+- Commit-bound CI/workflow results.
+- Future immutable model-result bundles that meet the canonical artifact contract.
 
----
+### Tier B — High-value historical evidence
 
-## Completion Summaries
+- `DATA_LEAKAGE_FIX_REPORT.md` — proves the original headline metrics were invalid and records the post-fix NO-GO baseline.
+- Merged GitHub pull requests and commit history — prove specific code changes and scoped validation.
+- `CLAUDE_IMPLEMENTATION_SUMMARY.md` and `CHANGELOG_CLAUDE_SESSION.md` — useful change provenance, but their readiness/test-total conclusions require independent verification.
 
-### System Status: Production Ready ✅
+### Tier C — Unverified summaries and proposals
 
-**Current Model**: Favorites-only specialist (xgboost_favorites_only.pkl)  
-**Backtest Results**: 69.23% win rate, 60.05% ROI  
-**Decision**: GO - Ready for paper trading
+- Former “production ready” status reports.
+- Favorites-only 69.23% / 60.05% summary without a tracked result bundle.
+- AI-generated system blueprints, gap audits, architecture proposals, and ROI projections.
+- Discovery reports based on in-sample associations or assumed odds.
 
-### Key Milestones
+Tier C material may generate hypotheses. It cannot authorize deployment.
 
-- **Phase 1**: Foundation (Data pipeline, features, basic model)
-- **Phase 2**: Data leakage fix (Removed betting lines from features)
-- **Phase 3**: Model improvement (Favorites-only strategy)
-- **Phase 4**: Production (Dashboard, automation, documentation)
+## Known performance claims
 
-### Implementation Summary
+| Claim | Classification | Required action |
+|---|---|---|
+| 67.22% win rate / 428.04% ROI | Invalid due to betting-line leakage and unrealistic odds | Never use as current performance |
+| 49.57% win rate / -23.62% ROI | Historical honest baseline; NO-GO | Use as regression reference only |
+| 69.23% win rate / 60.05% ROI on 52 bets | Unverified summary | Reproduce from immutable data and untouched holdout |
+| 30/30 or “all tests” | Historical scoped claim | Record exact executable test inventory and CI result |
 
-- **Data Pipeline**: nflreadpy integration complete
-- **Features**: 41 recommended features (no betting lines)
-- **Model**: XGBoost favorites-only specialist
-- **Backtesting**: Automated with GO/NO-GO criteria
-- **Dashboard**: Streamlit app with backtesting tab
-- **Automation**: Daily picks, weekly retraining, notifications
+## Required report format going forward
 
----
+Every model or strategy report must state:
 
-## Audit Reports
+- evidence status;
+- code commit;
+- data snapshot and coverage;
+- prediction cutoff and leakage controls;
+- split windows;
+- actual market-price source;
+- complete ledger and push handling;
+- calibration and uncertainty;
+- predefined thresholds;
+- reproduction command;
+- tests and CI scope;
+- limitations and unexercised integrations.
 
-### Data Leakage Audit (Complete)
-
-**Issue**: Betting line features were used in model training  
-**Fix**: Removed all betting line features from training data  
-**Impact**: Honest backtest results, realistic expectations  
-**Result**: Initial NO-GO (49.57% win rate), then GO after strategy refinement
-
-### Codebase Audit (2025-01-27)
-
-**Status**: Complete  
-**Actions Taken**:
-- Fixed test import issues (patch paths)
-- Removed temp files
-- Consolidated documentation
-- Fixed encoding issues
-- Updated requirements.txt
-
-**Test Status**: All tests passing (with proper dependencies)
-
----
-
-## Migration History
-
-### nflreadpy Migration
-
-**Date**: 2025-01-27  
-**Status**: Complete  
-**Reason**: Better data quality and API stability  
-**Files Updated**: 
-- `src/data_pipeline.py`
-- `requirements.txt`
-- All tests
-- Documentation
-
-**Result**: All tests passing, system functional
-
----
-
-## Phase Reports
-
-### Phase 1: Foundation Validation ✅
-
-- Python 3.13.4 environment
-- All tests passing
-- Data pipeline validated
-- Data downloaded (2,476 games, 2016-2024)
-
-### Phase 2: Feature Engineering ✅
-
-- 44 features created (without betting lines)
-- Feature builders: Elo, Rest Days, Form, Weather
-- Pipeline validated
-- No data leakage
-
-### Phase 3: Model Training ✅
-
-- XGBoost model trained
-- Probabilities calibrated
-- Models saved
-- Favorites-only specialist created
-
-### Phase 4: Backtesting ✅
-
-- Backtest complete (52 bets, 2023-2024)
-- Results: 69.23% win rate, 60.05% ROI
-- Decision: **GO**
-
-### Phase 5: Code Quality ✅
-
-- All linting checks pass
-- Code formatted consistently
-- All tests passing
-- Documentation complete
-
----
-
-## Deployment History
-
-### GitHub Repository
-
-**URL**: https://github.com/EAGLE605/nfl-betting-system  
-**Status**: Active  
-**Branch**: master  
-**Visibility**: Public
-
-### Production Deployment
-
-**Status**: Ready  
-**Components**:
-- Dashboard (Streamlit)
-- Daily picks generator
-- Backtesting system
-- Model training pipeline
-- Notification system
-
----
-
-## Additional Status Reports
-
-### Testing & Validation
-- **TESTING_COMPLETE.md**: All test suites passed (16/16)
-- **SANDBOX_COMPLETE.md**: Sandbox testing validated
-- **COMPREHENSIVE_TEST_SUITE.md**: Full test coverage
-
-### Integration & Features
-- **XAI_GROK_INTEGRATION_COMPLETE.md**: Grok AI integration ready
-- **SECURITY_REMEDIATION_COMPLETE.md**: All security issues resolved
-- **SYSTEM_READY.md**: System ready for paper trading
-
-### Model Evolution
-- **MODEL_EVOLUTION_75PCT_SUMMARY.md**: Model improvement journey
-- **RETRAINING_ACTION_PLAN.md**: Retraining strategy
-- **RETRAINING_RESULTS_SUMMARY.md**: Retraining results
-
----
-
-## Notes
-
-- All historical reports have been consolidated into this document
-- Individual phase reports preserved in git history
-- For current status, see [README.md](../README.md)
-- For setup instructions, see [QUICK_START_GUIDE.md](../QUICK_START_GUIDE.md)
-
----
-
-*This document consolidates information from all historical reports including:*
-- Completion summaries (6 files)
-- Audit reports (7 files)
-- Migration docs (4 files)
-- Phase reports (3 files)
-- Deployment docs (3 files)
-- Testing reports (3 files)
-- Integration reports (2 files)
-- Model evolution reports (3 files)
-
+A report missing these fields is automatically `unverified`.
