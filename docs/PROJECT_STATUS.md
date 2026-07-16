@@ -14,6 +14,30 @@ The strongest reproducible historical audit found that the original headline met
 
 Later summaries report 69.23% win rate and 60.05% ROI on 52 bets for a favorites-only refinement. The repository does not currently contain a tracked, commit-bound result bundle proving that claim through an independent temporal holdout with complete data, configuration, model, price, and execution provenance. The claim is therefore historical and unverified, not a release gate.
 
+## Plan authority
+
+- [`../TASKS.md`](../TASKS.md) is the ordered repository execution plan.
+- [`../PAPER_TRADING_PLAN.md`](../PAPER_TRADING_PLAN.md) is the controlling prospective paper-trading protocol.
+- Historical autonomous-agent, feature-expansion, four-week paper-trading, and “production ready” plans are non-authoritative when they conflict with these documents.
+
+The active plan prioritizes intent preservation, exact market contracts, immutable evidence, honest negative-baseline reproduction, one bounded model candidate, prospective paper tracking, and failure-safe operations. Agent swarms, cross-sport expansion, autonomous betting, and UI expansion are stopped until a measured failure in that core loop justifies them.
+
+## Artifact maturity rule
+
+Creation is not correctness. The following states are distinct:
+
+```text
+created
+→ parsed
+→ executed
+→ behavior_tested
+→ value_validated
+→ prospectively_validated
+→ authorized
+```
+
+No lower state implies a higher state. A Claude output, skill, prompt, generated test, green CI run, agent vote, or polished report is not independent domain proof. Every consequential claim must state what its evidence proves, what it does not prove, and the next required proof.
+
 ## Authorized outcomes
 
 The system may:
@@ -80,10 +104,11 @@ A markdown statement, chat response, skill, or generated architecture without th
 
 A change may be called code-complete only when the affected tests and static checks pass. A model may be called validated only when the result artifact above is reproduced. The project may be called live-ready only after:
 
-1. all model-validation gates pass;
-2. a forward paper-trading period passes predefined criteria;
+1. Gates 0 through 5 in `TASKS.md` pass;
+2. the frozen forward protocol in `PAPER_TRADING_PLAN.md` returns `PASS_TO_LIVE_REVIEW`;
 3. data/provider/legal/operational assumptions are rechecked;
 4. failure recovery, monitoring, and kill switches are exercised;
-5. the operator explicitly changes this canonical status in a reviewed commit.
+5. an independent review is complete;
+6. the operator explicitly changes this canonical status in a reviewed commit.
 
 Until then, **NO BET is the default safe output**.
