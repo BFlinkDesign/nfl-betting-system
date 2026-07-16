@@ -15,8 +15,9 @@ class PromotionPolicy:
     min_discovery_sample: int = 100
     min_holdout_sample: int = 50
     max_adjusted_p_value: float = 0.05
-    break_even_probability: float = 0.524
+    break_even_probability: float | None = None
     min_holdout_roi: float = 0.0
+    min_holdout_roi_lower_bound: float = 0.0
     confidence_level: float = 0.95
 
 
@@ -25,6 +26,7 @@ class PromotionDecision:
     eligible: bool
     blockers: tuple[str, ...]
     holdout_wilson_lower_bound: float
+    holdout_roi_lower_bound: float | None
 
 
 def american_to_decimal(american_odds: float) -> float:
@@ -121,6 +123,7 @@ def assess_promotion(
     holdout_sample_size: int,
     holdout_wins: int,
     holdout_roi: float,
+    holdout_roi_lower_bound: float | None,
     adjusted_p_value: float,
     uses_actual_market_prices: bool,
     has_temporal_holdout: bool,
@@ -144,6 +147,10 @@ def assess_promotion(
         raise ValueError("holdout_wins must be between zero and holdout_sample_size")
     if not math.isfinite(float(holdout_roi)):
         raise ValueError("holdout_roi must be finite")
+    if holdout_roi_lower_bound is not None and not math.isfinite(
+        float(holdout_roi_lower_bound)
+    ):
+        raise ValueError("holdout_roi_lower_bound must be finite when provided")
     if not math.isfinite(float(adjusted_p_value)) or not 0 <= adjusted_p_value <= 1:
         raise ValueError("adjusted_p_value must be between 0 and 1")
 
@@ -158,14 +165,24 @@ def assess_promotion(
             f"adjusted p-value {adjusted_p_value:.4f} > "
             f"{policy.max_adjusted_p_value:.4f}"
         )
-    if lower_bound <= policy.break_even_probability:
-        blockers.append(
-            f"holdout Wilson lower bound {lower_bound:.4f} <= break-even "
-            f"{policy.break_even_probability:.4f}"
-        )
+    if policy.break_even_probability is not None:
+        if not 0.0 < policy.break_even_probability < 1.0:
+            raise ValueError("break_even_probability must be between 0 and 1")
+        if lower_bound <= policy.break_even_probability:
+            blockers.append(
+                f"holdout Wilson lower bound {lower_bound:.4f} <= break-even "
+                f"{policy.break_even_probability:.4f}"
+            )
     if holdout_roi <= policy.min_holdout_roi:
         blockers.append(
             f"holdout ROI {holdout_roi:.4f} <= {policy.min_holdout_roi:.4f}"
+        )
+    if holdout_roi_lower_bound is None:
+        blockers.append("holdout ROI uncertainty bound is missing")
+    elif holdout_roi_lower_bound <= policy.min_holdout_roi_lower_bound:
+        blockers.append(
+            f"holdout ROI lower bound {holdout_roi_lower_bound:.4f} <= "
+            f"{policy.min_holdout_roi_lower_bound:.4f}"
         )
     if not uses_actual_market_prices:
         blockers.append("actual market prices were not used")
@@ -178,4 +195,5 @@ def assess_promotion(
         eligible=not blockers,
         blockers=tuple(blockers),
         holdout_wilson_lower_bound=lower_bound,
+        holdout_roi_lower_bound=holdout_roi_lower_bound,
     )
