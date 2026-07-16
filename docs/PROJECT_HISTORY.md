@@ -1,93 +1,58 @@
-# Project History & Implementation Summary
+# Project History — Evidence-Aware Timeline
 
-**Last Updated**: 2025-01-27  
-**Status**: Production Ready ✅
+**Canonical current status:** Research / paper-trading only. See [`PROJECT_STATUS.md`](PROJECT_STATUS.md).
 
----
+This file records what happened; it does not independently certify current performance.
 
-## Overview
+## Phase 1 — Foundation
 
-This document consolidates the project's implementation history, key decisions, and milestones. For current system status, see [README.md](../README.md).
+Implemented data ingestion, feature engineering, model training, backtesting, dashboards, notifications, and automation scaffolding.
 
----
+## Phase 2 — Leakage discovery and honest baseline
 
-## Implementation Timeline
+The project identified that betting lines and derived line features had entered model features. Historical headline results of 67.22% win rate and 428.04% ROI were therefore circular and invalid for an independent prediction claim.
 
-### Phase 1: Foundation (Complete)
-- Data pipeline with nflreadpy
-- Feature engineering (44+ features)
-- Basic XGBoost model
-- Initial backtesting
+After removing line leakage and using actual moneyline prices, the reported baseline was:
 
-### Phase 2: Data Leakage Fix (Complete)
-- Removed betting line features from model training
-- Fixed backtest to use actual odds
-- Honest results: 49.57% win rate, -23.62% ROI (NO-GO)
+- 49.57% win rate;
+- -23.62% ROI;
+- -25.15% maximum drawdown;
+- NO-GO.
 
-### Phase 3: Model Improvement (Complete)
-- Favorites-only specialist model
-- Aggressive Kelly sizing
-- Results: 69.23% win rate, 60.05% ROI (GO)
+Evidence: `DATA_LEAKAGE_FIX_REPORT.md`.
 
-### Phase 4: Production (Complete)
-- Dashboard with backtesting tab
-- Automated pipelines
-- Documentation consolidation
+## Phase 3 — Favorites-only refinement claim
 
----
+Historical summaries state that a favorites-only XGBoost model produced 69.23% win rate and 60.05% ROI across 52 bets in 2023-2024.
 
-## Key Decisions
+**Evidence classification:** unverified historical summary. The tracked repository does not currently provide a commit-bound result bundle containing the complete ledger, immutable data snapshot, model digest, configuration, temporal selection/calibration/holdout boundaries, and reproduction command. The result may be investigated, but it is not current production evidence.
 
-1. **Data Source**: Migrated from `nfl_data_py` to `nflreadpy`
-2. **Data Leakage**: Removed all betting line features from training
-3. **Strategy**: Focused on favorites-only (odds 1.3-2.0)
-4. **Betting**: Aggressive Kelly sizing for proven edges
+## Phase 4 — Automation and agent-generated expansion
 
----
+The repository accumulated dashboards, automated scripts, LLM-assisted hypothesis generation, resilience utilities, CI hardening, and many completion/status reports. Several reports overstated system readiness or test coverage relative to the surviving executable evidence.
 
-## Migration History
+## Phase 5 — Claude Code hardening
 
-### nflreadpy Migration
-- **Date**: 2025-01-27
-- **Status**: Complete
-- **Files Updated**: All source files, documentation
-- **Result**: All tests passing, system functional
+A single identifiable Claude Code session produced merged PRs that:
 
----
+- repaired and pinned the web-session/CI environment;
+- pinned GitHub Actions and reduced workflow permissions;
+- fixed network timeout and bare-exception hazards;
+- added dependency and tooling automation.
 
-## Audit History
+These are valid engineering improvements. Their passing unit-test scopes do not validate betting performance.
 
-### Data Leakage Audit
-- **Issue**: Betting lines used as features
-- **Fix**: Removed from training, kept for backtest odds
-- **Impact**: Honest results, realistic expectations
+## Phase 6 — Evidence and state hardening (2026-07-16)
 
-### Codebase Audit
-- **Date**: 2025-01-27
-- **Status**: Complete
-- **Actions**: Removed temp files, consolidated docs, fixed imports
+- Reclassified the project as research/paper-trading only.
+- Added cross-agent operating rules.
+- Made Strategy Registry persistence atomic, validated, conflict-aware, and transactional.
+- Separated review status from evidence maturity.
+- Converted Bulldog discovery into a read-only research screener.
+- Added false-discovery-rate correction, uncertainty bounds, and explicit promotion blockers.
+- Removed fabricated ROI and automatic strategy promotion.
+- Added focused regression tests.
 
----
+## Current next milestone
 
-## Current System Status
-
-- **Model**: Favorites-only specialist (xgboost_favorites_only.pkl)
-- **Features**: 41 recommended features (no betting lines)
-- **Backtest Results**: 69.23% win rate, 60.05% ROI
-- **Status**: GO - Ready for paper trading
-
----
-
-## Documentation Structure
-
-- **README.md**: Main documentation
-- **QUICK_START_GUIDE.md**: 5-minute setup
-- **SETUP_GUIDE.md**: Detailed setup instructions
-- **API_COMPLETE_GUIDE.md**: API documentation
-- **docs/ARCHITECTURE.md**: System architecture
-- **docs/PROJECT_HISTORY.md**: This file (consolidated history)
-
----
-
-For detailed reports, see individual phase reports in `docs/` directory.
-
+Create a reproducible walk-forward result bundle using actual market prices, untouched temporal holdout data, calibrated probabilities, and a complete paper-trading ledger. Until that exists and passes predefined gates, the project remains NO-GO for live money.
