@@ -1,0 +1,106 @@
+name: Temporary hardening formatter
+
+on:
+  push:
+    branches:
+      - codex/intel-alignment-hardening-20260716
+
+permissions:
+  contents: write
+
+jobs:
+  format-and-verify:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    steps:
+      - name: Check out hardening branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          ref: codex/intel-alignment-hardening-20260716
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b  # v5.3.0
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install pinned development tools and runtime dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
+
+      - name: Apply explicit import-boundary hardening
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("scripts/bulldog_edge_discovery.py")
+          text = path.read_text(encoding="utf-8")
+          old = '''PROJECT_ROOT = Path(__file__).resolve().parent.parent
+          sys.path.insert(0, str(PROJECT_ROOT))
+
+          import pandas as pd
+          from scipy import stats
+
+          from src.discovery_validation import benjamini_hochberg, wilson_lower_bound
+          from src.strategy_registry import StrategyRegistry
+          '''
+          new = '''import pandas as pd
+          from scipy import stats
+
+          PROJECT_ROOT = Path(__file__).resolve().parent.parent
+          sys.path.insert(0, str(PROJECT_ROOT))
+
+          from src.discovery_validation import benjamini_hochberg, wilson_lower_bound  # noqa: E402
+          from src.strategy_registry import StrategyRegistry  # noqa: E402
+          '''
+          if old not in text:
+              raise SystemExit("Expected Bulldog import block was not found; refusing to guess")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+      - name: Apply pinned formatters to the bounded change set
+        run: |
+          files=(
+            src/strategy_registry.py
+            src/discovery_validation.py
+            scripts/bulldog_edge_discovery.py
+            tests/test_strategy_registry.py
+            tests/test_discovery_validation.py
+            tests/test_bulldog_edge_discovery.py
+          )
+          isort --profile black "${files[@]}"
+          black "${files[@]}"
+          black --check "${files[@]}"
+          isort --check-only --profile black "${files[@]}"
+          ruff check "${files[@]}"
+
+      - name: Run focused regression tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q \
+            tests/test_strategy_registry.py \
+            tests/test_discovery_validation.py \
+            tests/test_bulldog_edge_discovery.py
+          python -m compileall -q src scripts
+
+      - name: Commit deterministic formatter output
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            src/strategy_registry.py \
+            src/discovery_validation.py \
+            scripts/bulldog_edge_discovery.py \
+            tests/test_strategy_registry.py \
+            tests/test_discovery_validation.py \
+            tests/test_bulldog_edge_discovery.py
+          if git diff --cached --quiet; then
+            echo "No formatter changes required."
+          else
+            git commit -m "style: apply pinned formatters to hardening changes"
+            git push origin HEAD:codex/intel-alignment-hardening-20260716
+          fi
