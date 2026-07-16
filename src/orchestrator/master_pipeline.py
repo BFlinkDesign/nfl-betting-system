@@ -19,7 +19,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from scripts.evaluate_paper_decisions import evaluate_payload
-
 from src.betting.decision_contracts import PAPER_AUTHORITY
 
 logger = logging.getLogger(__name__)
