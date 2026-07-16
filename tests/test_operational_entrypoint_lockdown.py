@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+
 from scripts import backfill_2025_season
 from scripts.generate_daily_picks_with_grok import GrokEnhancedPicksGenerator
 from scripts.pregame_prediction_engine import OddsAPIClient, PreGameEngine
@@ -12,7 +13,6 @@ from scripts.start_autonomous_system import (
     AutonomousExecutionBlockedError,
     AutonomousSystem,
 )
-
 from src.agents.risk_management_agent import RiskManagementAgent
 from src.agents.strategy_analyst_agent import StrategyAnalystAgent
 
