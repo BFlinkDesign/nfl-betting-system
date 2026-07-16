@@ -36,6 +36,7 @@ def test_hypothesis_screen_is_research_only_and_registry_read_only(tmp_path):
     assert not candidates[0]["promotion_eligible"]
     assert discovery.edges_found == []
     assert discovery.registry.get_stats()["total"] == 0
+    assert not (tmp_path / "registry.json").exists()
 
 
 def test_multiple_testing_correction_is_applied_before_candidate_classification(

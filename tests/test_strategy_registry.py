@@ -149,3 +149,15 @@ def test_active_writer_lock_fails_closed(tmp_path, monkeypatch):
     assert not success
     assert "locked by another writer" in message
     assert registry.strategies == {}
+
+
+def test_read_only_registry_does_not_create_or_mutate_state(tmp_path):
+    path = tmp_path / "registry.json"
+    registry = StrategyRegistry(path, read_only=True)
+
+    assert not path.exists()
+    success, message = registry.add_strategy(make_strategy())
+    assert not success
+    assert "read-only mode" in message
+    assert registry.strategies == {}
+    assert not path.exists()

@@ -54,7 +54,7 @@ class BulldogEdgeDiscovery:
         self.edges_found: list[dict[str, Any]] = []
         self.analysis_window = "all_available_seasons"
         self._finalized = False
-        self.registry = StrategyRegistry(registry_path)
+        self.registry = StrategyRegistry(registry_path, read_only=True)
 
     def load_data(self) -> bool:
         """Load historical outcomes and derive research-only targets."""

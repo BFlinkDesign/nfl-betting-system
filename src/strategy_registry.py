@@ -233,10 +233,13 @@ class StrategyRegistry:
         "evidence",
     }
 
-    def __init__(self, registry_path: str | Path | None = None):
+    def __init__(
+        self, registry_path: str | Path | None = None, *, read_only: bool = False
+    ):
         self.registry_path = (
             DEFAULT_REGISTRY_PATH if registry_path is None else Path(registry_path)
         )
+        self.read_only = read_only
         self.strategies: Dict[str, Strategy] = {}
         self._fingerprint: Optional[str] = None
         self._load_registry()
@@ -291,7 +294,8 @@ class StrategyRegistry:
         if not self.registry_path.exists():
             self.strategies = {}
             self._fingerprint = None
-            self._persist({})
+            if not self.read_only:
+                self._persist({})
             return
 
         raw = self.registry_path.read_bytes()
@@ -373,6 +377,8 @@ class StrategyRegistry:
         }
 
     def _persist(self, strategies: Dict[str, Strategy]) -> None:
+        if self.read_only:
+            raise RegistryPersistenceError("registry is open in read-only mode")
         self.registry_path.parent.mkdir(parents=True, exist_ok=True)
         with self._exclusive_lock():
             current_fingerprint = self._current_file_fingerprint()
@@ -595,9 +601,10 @@ class StrategyRegistry:
             if new_id in self.strategies:
                 return False, f"Strategy ID {new_id} already exists"
 
+            base_name = re.sub(r" \(v\d+\)$", "", original.name)
             new_strategy = Strategy(
                 strategy_id=new_id,
-                name=f"{re.sub(r' \(v\d+\)$', '', original.name)} (v{new_version})",
+                name=f"{base_name} (v{new_version})",
                 description=original.description,
                 pattern=original.pattern,
                 win_rate=updated_metrics.get("win_rate", original.win_rate),
