@@ -14,6 +14,7 @@ from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+
 from src.betting.decision_contracts import PAPER_AUTHORITY
 from src.betting.kelly import KellyCriterion
 
