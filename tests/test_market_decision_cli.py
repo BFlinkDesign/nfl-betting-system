@@ -3,7 +3,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 SCRIPT = Path("scripts/evaluate_market_decision.py")
 HASH = "a" * 64
 
