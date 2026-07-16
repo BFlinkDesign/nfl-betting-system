@@ -80,7 +80,9 @@ def build_single(payload: dict[str, Any]) -> dict[str, Any]:
         market_id=raw_estimate["market_id"],
         selection=raw_estimate["selection"],
         win_probability=raw_estimate["win_probability"],
-        generated_at=parse_datetime(raw_estimate["generated_at"], "estimate.generated_at"),
+        generated_at=parse_datetime(
+            raw_estimate["generated_at"], "estimate.generated_at"
+        ),
         model_id=raw_estimate["model_id"],
         model_version=raw_estimate["model_version"],
         model_artifact_sha256=raw_estimate["model_artifact_sha256"],
@@ -107,7 +109,9 @@ def build_parlay(payload: dict[str, Any]) -> dict[str, Any]:
         leg_american_odds=tuple(raw_quote["leg_american_odds"]),
         quoted_american_odds=raw_quote["quoted_american_odds"],
         observed_at=parse_datetime(raw_quote["observed_at"], "quote.observed_at"),
-        earliest_start_at=parse_datetime(raw_quote["earliest_start_at"], "quote.earliest_start_at"),
+        earliest_start_at=parse_datetime(
+            raw_quote["earliest_start_at"], "quote.earliest_start_at"
+        ),
         status=MarketStatus(raw_quote.get("status", "open")),
         pricing_adjustment_id=raw_quote.get("pricing_adjustment_id", ""),
         source_receipt_id=raw_quote.get("source_receipt_id", ""),
@@ -116,7 +120,9 @@ def build_parlay(payload: dict[str, Any]) -> dict[str, Any]:
         parlay_id=raw_estimate["parlay_id"],
         leg_market_ids=tuple(raw_estimate["leg_market_ids"]),
         joint_probability=raw_estimate["joint_probability"],
-        generated_at=parse_datetime(raw_estimate["generated_at"], "estimate.generated_at"),
+        generated_at=parse_datetime(
+            raw_estimate["generated_at"], "estimate.generated_at"
+        ),
         model_id=raw_estimate["model_id"],
         model_version=raw_estimate["model_version"],
         model_artifact_sha256=raw_estimate["model_artifact_sha256"],

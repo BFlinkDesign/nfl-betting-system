@@ -67,7 +67,11 @@ def _require_nonempty(value: str, name: str) -> None:
 
 
 def _require_aware(value: datetime, name: str) -> None:
-    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+    if (
+        not isinstance(value, datetime)
+        or value.tzinfo is None
+        or value.utcoffset() is None
+    ):
         raise ValueError(f"{name} must be a timezone-aware datetime")
 
 
@@ -120,7 +124,13 @@ class MarketSnapshot:
     source_receipt_id: str = ""
 
     def __post_init__(self) -> None:
-        for name in ("event_id", "competition", "market_id", "market_type", "bookmaker"):
+        for name in (
+            "event_id",
+            "competition",
+            "market_id",
+            "market_type",
+            "bookmaker",
+        ):
             _require_nonempty(getattr(self, name), name)
         _require_aware(self.observed_at, "observed_at")
         _require_aware(self.starts_at, "starts_at")
@@ -133,7 +143,9 @@ class MarketSnapshot:
             raise ValueError("market outcome selections must be unique")
 
     def quote_for(self, selection: str) -> OutcomeQuote | None:
-        return next((quote for quote in self.outcomes if quote.selection == selection), None)
+        return next(
+            (quote for quote in self.outcomes if quote.selection == selection), None
+        )
 
 
 @dataclass(frozen=True)
@@ -151,7 +163,14 @@ class ProbabilityEstimate:
     evidence_status: EvidenceStatus
 
     def __post_init__(self) -> None:
-        for name in ("event_id", "market_id", "selection", "model_id", "model_version", "dataset_id"):
+        for name in (
+            "event_id",
+            "market_id",
+            "selection",
+            "model_id",
+            "model_version",
+            "dataset_id",
+        ):
             _require_nonempty(getattr(self, name), name)
         _require_probability(self.win_probability, "win_probability")
         _require_aware(self.generated_at, "generated_at")
@@ -212,7 +231,9 @@ class ParlayQuote:
         if len(self.leg_market_ids) < 2:
             raise ValueError("a parlay requires at least two legs")
         if len(self.leg_market_ids) != len(self.leg_american_odds):
-            raise ValueError("leg_market_ids and leg_american_odds must have equal length")
+            raise ValueError(
+                "leg_market_ids and leg_american_odds must have equal length"
+            )
         if len(set(self.leg_market_ids)) != len(self.leg_market_ids):
             raise ValueError("parlay leg market IDs must be unique")
         for market_id in self.leg_market_ids:
@@ -271,11 +292,16 @@ def raw_implied_probability(american_odds: float) -> float:
 def no_vig_probabilities(outcomes: Sequence[OutcomeQuote]) -> dict[str, float]:
     if len(outcomes) < 2:
         raise ValueError("at least two outcomes are required to remove vig")
-    raw = {outcome.selection: raw_implied_probability(outcome.american_odds) for outcome in outcomes}
+    raw = {
+        outcome.selection: raw_implied_probability(outcome.american_odds)
+        for outcome in outcomes
+    }
     denominator = sum(raw.values())
     if denominator <= 0.0 or not math.isfinite(denominator):
         raise ValueError("market implied probabilities are invalid")
-    return {selection: probability / denominator for selection, probability in raw.items()}
+    return {
+        selection: probability / denominator for selection, probability in raw.items()
+    }
 
 
 def full_kelly_fraction(win_probability: float, decimal_odds: float) -> float:
@@ -295,7 +321,11 @@ def payout_breakdown(stake: float, american_odds: float) -> dict[str, float]:
         raise ValueError("stake must be finite and positive")
     decimal_odds = american_to_decimal(american_odds)
     profit = stake_value * (decimal_odds - 1.0)
-    return {"stake": round(stake_value, 2), "profit": round(profit, 2), "total_return": round(stake_value + profit, 2)}
+    return {
+        "stake": round(stake_value, 2),
+        "profit": round(profit, 2),
+        "total_return": round(stake_value + profit, 2),
+    }
 
 
 def reconcile_parlay_price(
@@ -309,7 +339,9 @@ def reconcile_parlay_price(
         raise ValueError("at least two leg prices are required")
     if relative_tolerance < 0.0:
         raise ValueError("relative_tolerance cannot be negative")
-    expected_decimal = reduce(mul, (american_to_decimal(odds) for odds in leg_american_odds), 1.0)
+    expected_decimal = reduce(
+        mul, (american_to_decimal(odds) for odds in leg_american_odds), 1.0
+    )
     quoted_decimal = american_to_decimal(quoted_american_odds)
     relative_difference = abs(quoted_decimal - expected_decimal) / expected_decimal
     arithmetic_match = relative_difference <= relative_tolerance
@@ -323,7 +355,9 @@ def reconcile_parlay_price(
     return {
         "status": status,
         "expected_decimal_from_visible_legs": round(expected_decimal, 8),
-        "expected_american_from_visible_legs": round(decimal_to_american(expected_decimal), 2),
+        "expected_american_from_visible_legs": round(
+            decimal_to_american(expected_decimal), 2
+        ),
         "quoted_decimal": round(quoted_decimal, 8),
         "quoted_american": float(quoted_american_odds),
         "relative_difference": round(relative_difference, 8),
@@ -341,9 +375,14 @@ def _jsonable(value: Any) -> Any:
     if isinstance(value, datetime):
         return _utc_iso(value)
     if is_dataclass(value):
-        return {field.name: _jsonable(getattr(value, field.name)) for field in fields(value)}
+        return {
+            field.name: _jsonable(getattr(value, field.name)) for field in fields(value)
+        }
     if isinstance(value, Mapping):
-        return {str(key): _jsonable(item) for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))}
+        return {
+            str(key): _jsonable(item)
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+        }
     if isinstance(value, (tuple, list)):
         return [_jsonable(item) for item in value]
     return value
@@ -351,7 +390,9 @@ def _jsonable(value: Any) -> Any:
 
 def _seal_receipt(payload: Mapping[str, Any]) -> dict[str, Any]:
     jsonable = _jsonable(dict(payload))
-    canonical = json.dumps(jsonable, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    canonical = json.dumps(
+        jsonable, sort_keys=True, separators=(",", ":"), allow_nan=False
+    )
     sealed = dict(jsonable)
     sealed["receipt_sha256"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     return sealed
@@ -361,7 +402,9 @@ def _age_seconds(now: datetime, timestamp: datetime) -> float:
     return (now - timestamp).total_seconds()
 
 
-def _minimum_acceptable_odds(win_probability: float, min_expected_value: float) -> tuple[float, float]:
+def _minimum_acceptable_odds(
+    win_probability: float, min_expected_value: float
+) -> tuple[float, float]:
     minimum_decimal = max((1.0 + min_expected_value) / win_probability, 1.000000001)
     return minimum_decimal, decimal_to_american(minimum_decimal)
 
@@ -380,8 +423,23 @@ def evaluate_single_market(
     reasons: list[str] = []
 
     if intent == UserIntent.INFORMATION:
-        reasons.append("information_request_must_be_answered_without_a_wager_recommendation")
-        return _seal_receipt({"receipt_type": "single_market_decision", "decision": DecisionCode.NO_BET, "intent": intent, "policy": policy, "evaluated_at": now, "reasons": reasons, "blockers": blockers, "market": snapshot, "estimate": estimate, "metrics": {}})
+        reasons.append(
+            "information_request_must_be_answered_without_a_wager_recommendation"
+        )
+        return _seal_receipt(
+            {
+                "receipt_type": "single_market_decision",
+                "decision": DecisionCode.NO_BET,
+                "intent": intent,
+                "policy": policy,
+                "evaluated_at": now,
+                "reasons": reasons,
+                "blockers": blockers,
+                "market": snapshot,
+                "estimate": estimate,
+                "metrics": {},
+            }
+        )
 
     if intent == UserIntent.LIVE_BET_REQUEST and not policy.live_money_authorized:
         blockers.append("live_money_not_authorized")
@@ -407,10 +465,16 @@ def evaluate_single_market(
         blockers.append("model_estimate_stale")
     if snapshot.starts_at <= now:
         blockers.append("event_started_or_start_time_passed")
-    if _EVIDENCE_RANK[estimate.evidence_status] < _EVIDENCE_RANK[policy.min_evidence_status]:
+    if (
+        _EVIDENCE_RANK[estimate.evidence_status]
+        < _EVIDENCE_RANK[policy.min_evidence_status]
+    ):
         blockers.append("model_evidence_below_policy_minimum")
 
-    metrics: dict[str, Any] = {"market_age_seconds": round(market_age, 3), "model_age_seconds": round(model_age, 3)}
+    metrics: dict[str, Any] = {
+        "market_age_seconds": round(market_age, 3),
+        "model_age_seconds": round(model_age, 3),
+    }
     if blockers:
         decision = DecisionCode.BLOCKED
     else:
@@ -419,22 +483,30 @@ def evaluate_single_market(
         fair_market = no_vig_probabilities(snapshot.outcomes)[estimate.selection]
         probability_advantage = estimate.win_probability - fair_market
         expected_value = estimate.win_probability * decimal_odds - 1.0
-        minimum_decimal, minimum_american = _minimum_acceptable_odds(estimate.win_probability, policy.min_expected_value)
+        minimum_decimal, minimum_american = _minimum_acceptable_odds(
+            estimate.win_probability, policy.min_expected_value
+        )
         full_kelly = full_kelly_fraction(estimate.win_probability, decimal_odds)
-        paper_stake = min(policy.max_paper_stake_fraction, full_kelly * policy.fractional_kelly)
-        metrics.update({
-            "quoted_american_odds": float(quote.american_odds),
-            "quoted_decimal_odds": round(decimal_odds, 8),
-            "raw_implied_probability": round(raw_implied_probability(quote.american_odds), 8),
-            "no_vig_market_probability": round(fair_market, 8),
-            "model_probability": round(estimate.win_probability, 8),
-            "probability_advantage": round(probability_advantage, 8),
-            "expected_value_per_unit": round(expected_value, 8),
-            "minimum_acceptable_decimal_odds": round(minimum_decimal, 8),
-            "minimum_acceptable_american_odds": round(minimum_american, 2),
-            "full_kelly_fraction": round(full_kelly, 8),
-            "paper_stake_fraction": round(paper_stake, 8),
-        })
+        paper_stake = min(
+            policy.max_paper_stake_fraction, full_kelly * policy.fractional_kelly
+        )
+        metrics.update(
+            {
+                "quoted_american_odds": float(quote.american_odds),
+                "quoted_decimal_odds": round(decimal_odds, 8),
+                "raw_implied_probability": round(
+                    raw_implied_probability(quote.american_odds), 8
+                ),
+                "no_vig_market_probability": round(fair_market, 8),
+                "model_probability": round(estimate.win_probability, 8),
+                "probability_advantage": round(probability_advantage, 8),
+                "expected_value_per_unit": round(expected_value, 8),
+                "minimum_acceptable_decimal_odds": round(minimum_decimal, 8),
+                "minimum_acceptable_american_odds": round(minimum_american, 2),
+                "full_kelly_fraction": round(full_kelly, 8),
+                "paper_stake_fraction": round(paper_stake, 8),
+            }
+        )
         if expected_value < policy.min_expected_value:
             reasons.append("expected_value_below_policy_minimum")
         if probability_advantage < policy.min_probability_advantage:
@@ -445,7 +517,20 @@ def evaluate_single_market(
         else:
             decision = DecisionCode.PAPER_CANDIDATE
 
-    return _seal_receipt({"receipt_type": "single_market_decision", "decision": decision, "intent": intent, "policy": policy, "evaluated_at": now, "reasons": reasons, "blockers": blockers, "market": snapshot, "estimate": estimate, "metrics": metrics})
+    return _seal_receipt(
+        {
+            "receipt_type": "single_market_decision",
+            "decision": decision,
+            "intent": intent,
+            "policy": policy,
+            "evaluated_at": now,
+            "reasons": reasons,
+            "blockers": blockers,
+            "market": snapshot,
+            "estimate": estimate,
+            "metrics": metrics,
+        }
+    )
 
 
 def evaluate_parlay(
@@ -467,7 +552,9 @@ def evaluate_parlay(
     reasons: list[str] = []
 
     if intent == UserIntent.INFORMATION:
-        reasons.append("information_request_must_be_answered_without_a_wager_recommendation")
+        reasons.append(
+            "information_request_must_be_answered_without_a_wager_recommendation"
+        )
     if intent == UserIntent.LIVE_BET_REQUEST and not policy.live_money_authorized:
         blockers.append("live_money_not_authorized")
     if not policy.parlays_authorized:
@@ -493,14 +580,27 @@ def evaluate_parlay(
         blockers.append("joint_estimate_stale")
     if quote.earliest_start_at <= now:
         blockers.append("one_or_more_events_started")
-    if _EVIDENCE_RANK[estimate.evidence_status] < _EVIDENCE_RANK[policy.min_evidence_status]:
+    if (
+        _EVIDENCE_RANK[estimate.evidence_status]
+        < _EVIDENCE_RANK[policy.min_evidence_status]
+    ):
         blockers.append("joint_model_evidence_below_policy_minimum")
 
-    reconciliation = reconcile_parlay_price(quote.leg_american_odds, quote.quoted_american_odds, pricing_adjustment_id=quote.pricing_adjustment_id)
+    reconciliation = reconcile_parlay_price(
+        quote.leg_american_odds,
+        quote.quoted_american_odds,
+        pricing_adjustment_id=quote.pricing_adjustment_id,
+    )
     if reconciliation["status"] == "UNEXPLAINED_PRICE_DIFFERENCE":
-        blockers.append("parlay_price_does_not_reconcile_and_no_adjustment_is_documented")
+        blockers.append(
+            "parlay_price_does_not_reconcile_and_no_adjustment_is_documented"
+        )
 
-    metrics: dict[str, Any] = {"market_age_seconds": round(market_age, 3), "model_age_seconds": round(model_age, 3), "price_reconciliation": reconciliation}
+    metrics: dict[str, Any] = {
+        "market_age_seconds": round(market_age, 3),
+        "model_age_seconds": round(model_age, 3),
+        "price_reconciliation": reconciliation,
+    }
     if reasons and not blockers:
         decision = DecisionCode.NO_BET
     elif blockers:
@@ -509,17 +609,23 @@ def evaluate_parlay(
         decimal_odds = american_to_decimal(quote.quoted_american_odds)
         expected_value = estimate.joint_probability * decimal_odds - 1.0
         full_kelly = full_kelly_fraction(estimate.joint_probability, decimal_odds)
-        paper_stake = min(policy.max_parlay_paper_stake_fraction, full_kelly * policy.fractional_kelly)
-        minimum_decimal, minimum_american = _minimum_acceptable_odds(estimate.joint_probability, policy.min_expected_value)
-        metrics.update({
-            "quoted_decimal_odds": round(decimal_odds, 8),
-            "joint_model_probability": round(estimate.joint_probability, 8),
-            "expected_value_per_unit": round(expected_value, 8),
-            "minimum_acceptable_decimal_odds": round(minimum_decimal, 8),
-            "minimum_acceptable_american_odds": round(minimum_american, 2),
-            "full_kelly_fraction": round(full_kelly, 8),
-            "paper_stake_fraction": round(paper_stake, 8),
-        })
+        paper_stake = min(
+            policy.max_parlay_paper_stake_fraction, full_kelly * policy.fractional_kelly
+        )
+        minimum_decimal, minimum_american = _minimum_acceptable_odds(
+            estimate.joint_probability, policy.min_expected_value
+        )
+        metrics.update(
+            {
+                "quoted_decimal_odds": round(decimal_odds, 8),
+                "joint_model_probability": round(estimate.joint_probability, 8),
+                "expected_value_per_unit": round(expected_value, 8),
+                "minimum_acceptable_decimal_odds": round(minimum_decimal, 8),
+                "minimum_acceptable_american_odds": round(minimum_american, 2),
+                "full_kelly_fraction": round(full_kelly, 8),
+                "paper_stake_fraction": round(paper_stake, 8),
+            }
+        )
         if expected_value < policy.min_expected_value:
             reasons.append("expected_value_below_policy_minimum")
             metrics["paper_stake_fraction"] = 0.0
@@ -527,4 +633,17 @@ def evaluate_parlay(
         else:
             decision = DecisionCode.PAPER_CANDIDATE
 
-    return _seal_receipt({"receipt_type": "parlay_decision", "decision": decision, "intent": intent, "policy": policy, "evaluated_at": now, "reasons": reasons, "blockers": blockers, "quote": quote, "estimate": estimate, "metrics": metrics})
+    return _seal_receipt(
+        {
+            "receipt_type": "parlay_decision",
+            "decision": decision,
+            "intent": intent,
+            "policy": policy,
+            "evaluated_at": now,
+            "reasons": reasons,
+            "blockers": blockers,
+            "quote": quote,
+            "estimate": estimate,
+            "metrics": metrics,
+        }
+    )

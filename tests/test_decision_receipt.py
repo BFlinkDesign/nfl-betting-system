@@ -64,7 +64,10 @@ def test_information_request_never_turns_into_bet_offer():
         now=NOW,
     )
     assert receipt["decision"] == DecisionCode.NO_BET.value
-    assert "information_request_must_be_answered_without_a_wager_recommendation" in receipt["reasons"]
+    assert (
+        "information_request_must_be_answered_without_a_wager_recommendation"
+        in receipt["reasons"]
+    )
     assert receipt["metrics"] == {}
 
 
@@ -145,7 +148,9 @@ def test_profit_and_total_return_are_not_conflated():
 def test_world_cup_visible_leg_prices_do_not_reconcile_to_reported_total():
     audit = reconcile_parlay_price((-650, 430, -500), 998)
     assert audit["status"] == "UNEXPLAINED_PRICE_DIFFERENCE"
-    assert audit["expected_american_from_visible_legs"] == pytest.approx(633.85, abs=0.02)
+    assert audit["expected_american_from_visible_legs"] == pytest.approx(
+        633.85, abs=0.02
+    )
 
     documented = reconcile_parlay_price(
         (-650, 430, -500),
@@ -209,7 +214,10 @@ def test_enabled_parlay_requires_joint_and_price_evidence():
         policy=policy,
     )
     assert receipt["decision"] == DecisionCode.PAPER_CANDIDATE.value
-    assert receipt["metrics"]["paper_stake_fraction"] <= policy.max_parlay_paper_stake_fraction
+    assert (
+        receipt["metrics"]["paper_stake_fraction"]
+        <= policy.max_parlay_paper_stake_fraction
+    )
 
     missing_correlation = evaluate_parlay(
         intent=UserIntent.PAPER_BET_EVALUATION,
@@ -231,4 +239,7 @@ def test_unexplained_parlay_price_blocks_even_when_parlays_enabled():
         policy=DecisionPolicy(parlays_authorized=True),
     )
     assert receipt["decision"] == DecisionCode.BLOCKED.value
-    assert "parlay_price_does_not_reconcile_and_no_adjustment_is_documented" in receipt["blockers"]
+    assert (
+        "parlay_price_does_not_reconcile_and_no_adjustment_is_documented"
+        in receipt["blockers"]
+    )
