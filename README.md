@@ -4,6 +4,11 @@
 > **Live-money betting is not authorized. Profitability is not verified.**  
 > See [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) for the controlling status and evidence standard.
 
+Current execution controls:
+
+- [`TASKS.md`](TASKS.md): ordered, evidence-gated repository plan.
+- [`PAPER_TRADING_PLAN.md`](PAPER_TRADING_PLAN.md): frozen prospective paper-trading protocol.
+
 This repository is a single-operator NFL analytics and betting-research system. It ingests historical and current data, engineers pregame features, trains and evaluates probability models, screens hypotheses, sizes paper positions, and presents results through scripts and a Streamlit dashboard.
 
 The product outcome is not “produce a pick.” The product outcome is an **auditable decision**—including **NO BET**—whose data, market price, model version, calibration, uncertainty, and risk controls can be reproduced.
@@ -158,8 +163,11 @@ Historical documents are evidence of what was proposed or claimed—not proof th
 
 ## Project controls
 
-- [`AGENTS.md`](AGENTS.md): mandatory operating rules for Codex, Claude Code, and other coding agents.
 - [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md): canonical operational status and release gates.
+- [`TASKS.md`](TASKS.md): ordered execution gates and current work sequence.
+- [`PAPER_TRADING_PLAN.md`](PAPER_TRADING_PLAN.md): prospective paper protocol and promotion criteria.
+- [`AGENTS.md`](AGENTS.md): mandatory operating rules for Codex, Claude Code, and other coding agents.
+- [`docs/WORLD_CUP_SESSION_AUDIT_2026-07-16.md`](docs/WORLD_CUP_SESSION_AUDIT_2026-07-16.md): Spain/World Cup intent, market, pricing, and evidence lessons.
 - [`docs/INTEL_ALIGNMENT_AND_HARDENING_2026-07-16.md`](docs/INTEL_ALIGNMENT_AND_HARDENING_2026-07-16.md): source extraction, contradiction analysis, and remediation record.
 - [`DATA_LEAKAGE_FIX_REPORT.md`](DATA_LEAKAGE_FIX_REPORT.md): historical leakage finding and honest baseline.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): technical architecture; performance statements remain subordinate to current evidence.
