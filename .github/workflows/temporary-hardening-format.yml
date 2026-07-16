@@ -5,6 +5,10 @@ on:
     branches:
       - codex/intel-alignment-hardening-20260716
 
+concurrency:
+  group: temporary-hardening-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -32,7 +36,7 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install -r requirements-dev.txt
 
-      - name: Apply explicit compatibility and import-boundary hardening
+      - name: Apply bounded compatibility and read-only hardening
         shell: python
         run: |
           from pathlib import Path
@@ -47,31 +51,59 @@ jobs:
                   )
               path.write_text(text.replace(old, new, 1), encoding="utf-8")
 
-          bulldog_path = Path("scripts/bulldog_edge_discovery.py")
-          bulldog_old = '''PROJECT_ROOT = Path(__file__).resolve().parent.parent
-          sys.path.insert(0, str(PROJECT_ROOT))
-
-          import pandas as pd
-          from scipy import stats
-
-          from src.discovery_validation import benjamini_hochberg, wilson_lower_bound
-          from src.strategy_registry import StrategyRegistry
-          '''
-          bulldog_new = '''import pandas as pd
-          from scipy import stats
-
-          PROJECT_ROOT = Path(__file__).resolve().parent.parent
-          sys.path.insert(0, str(PROJECT_ROOT))
-
-          from src.discovery_validation import benjamini_hochberg, wilson_lower_bound  # noqa: E402
-          from src.strategy_registry import StrategyRegistry  # noqa: E402
-          '''
-          current_bulldog = bulldog_path.read_text(encoding="utf-8")
-          if "# noqa: E402" not in current_bulldog:
-              replace_once(bulldog_path, bulldog_old, bulldog_new)
-
           registry_path = Path("src/strategy_registry.py")
-          registry_old = '''            base_id = re.sub(r"_v\\d+$", "", original.strategy_id)
+          replace_once(
+              registry_path,
+              '''    def __init__(self, registry_path: str | Path | None = None):
+          self.registry_path = (
+              DEFAULT_REGISTRY_PATH if registry_path is None else Path(registry_path)
+          )
+          self.strategies: Dict[str, Strategy] = {}
+          self._fingerprint: Optional[str] = None
+          self._load_registry()
+          ''',
+              '''    def __init__(
+              self, registry_path: str | Path | None = None, *, read_only: bool = False
+          ):
+              self.registry_path = (
+                  DEFAULT_REGISTRY_PATH if registry_path is None else Path(registry_path)
+              )
+              self.read_only = read_only
+              self.strategies: Dict[str, Strategy] = {}
+              self._fingerprint: Optional[str] = None
+              self._load_registry()
+          ''',
+          )
+          replace_once(
+              registry_path,
+              '''        if not self.registry_path.exists():
+              self.strategies = {}
+              self._fingerprint = None
+              self._persist({})
+              return
+          ''',
+              '''        if not self.registry_path.exists():
+              self.strategies = {}
+              self._fingerprint = None
+              if not self.read_only:
+                  self._persist({})
+              return
+          ''',
+          )
+          replace_once(
+              registry_path,
+              '''    def _persist(self, strategies: Dict[str, Strategy]) -> None:
+              self.registry_path.parent.mkdir(parents=True, exist_ok=True)
+          ''',
+              '''    def _persist(self, strategies: Dict[str, Strategy]) -> None:
+              if self.read_only:
+                  raise RegistryPersistenceError("registry is open in read-only mode")
+              self.registry_path.parent.mkdir(parents=True, exist_ok=True)
+          ''',
+          )
+          replace_once(
+              registry_path,
+              '''            base_id = re.sub(r"_v\\d+$", "", original.strategy_id)
           new_id = f"{base_id}_v{new_version}"
           if new_id in self.strategies:
               return False, f"Strategy ID {new_id} already exists"
@@ -79,8 +111,8 @@ jobs:
           new_strategy = Strategy(
               strategy_id=new_id,
               name=f"{re.sub(r' \\(v\\d+\\)$', '', original.name)} (v{new_version})",
-          '''
-          registry_new = '''            base_id = re.sub(r"_v\\d+$", "", original.strategy_id)
+          ''',
+              '''            base_id = re.sub(r"_v\\d+$", "", original.strategy_id)
           new_id = f"{base_id}_v{new_version}"
           if new_id in self.strategies:
               return False, f"Strategy ID {new_id} already exists"
@@ -89,8 +121,73 @@ jobs:
           new_strategy = Strategy(
               strategy_id=new_id,
               name=f"{base_name} (v{new_version})",
+          ''',
+          )
+
+          bulldog_path = Path("scripts/bulldog_edge_discovery.py")
+          bulldog_text = bulldog_path.read_text(encoding="utf-8")
+          if "# noqa: E402" not in bulldog_text:
+              replace_once(
+                  bulldog_path,
+                  '''PROJECT_ROOT = Path(__file__).resolve().parent.parent
+          sys.path.insert(0, str(PROJECT_ROOT))
+
+          import pandas as pd
+          from scipy import stats
+
+          from src.discovery_validation import benjamini_hochberg, wilson_lower_bound
+          from src.strategy_registry import StrategyRegistry
+          ''',
+                  '''import pandas as pd
+          from scipy import stats
+
+          PROJECT_ROOT = Path(__file__).resolve().parent.parent
+          sys.path.insert(0, str(PROJECT_ROOT))
+
+          from src.discovery_validation import benjamini_hochberg  # noqa: E402
+          from src.discovery_validation import wilson_lower_bound  # noqa: E402
+          from src.strategy_registry import StrategyRegistry  # noqa: E402
+          ''',
+              )
+          replace_once(
+              bulldog_path,
+              '''        self._finalized = False
+          self.registry = StrategyRegistry(registry_path)
+          ''',
+              '''        self._finalized = False
+          self.registry = StrategyRegistry(registry_path, read_only=True)
+          ''',
+          )
+
+          registry_test_path = Path("tests/test_strategy_registry.py")
+          registry_test = registry_test_path.read_text(encoding="utf-8")
+          if "test_read_only_registry_does_not_create_or_mutate_state" not in registry_test:
+              registry_test += '''
+
+          def test_read_only_registry_does_not_create_or_mutate_state(tmp_path):
+              path = tmp_path / "registry.json"
+              registry = StrategyRegistry(path, read_only=True)
+
+              assert not path.exists()
+              success, message = registry.add_strategy(make_strategy())
+              assert not success
+              assert "read-only mode" in message
+              assert registry.strategies == {}
+              assert not path.exists()
           '''
-          replace_once(registry_path, registry_old, registry_new)
+              registry_test_path.write_text(registry_test, encoding="utf-8")
+
+          bulldog_test_path = Path("tests/test_bulldog_edge_discovery.py")
+          replace_once(
+              bulldog_test_path,
+              '''    assert discovery.edges_found == []
+          assert discovery.registry.get_stats()["total"] == 0
+          ''',
+              '''    assert discovery.edges_found == []
+          assert discovery.registry.get_stats()["total"] == 0
+          assert not (tmp_path / "registry.json").exists()
+          ''',
+          )
 
       - name: Apply pinned formatters to the bounded change set
         run: |
@@ -107,6 +204,20 @@ jobs:
           black --check "${files[@]}"
           isort --check-only --profile black "${files[@]}"
           ruff check "${files[@]}"
+
+      - name: Verify Python grammar compatibility
+        shell: python
+        run: |
+          import ast
+          from pathlib import Path
+
+          for path in (
+              Path("src/strategy_registry.py"),
+              Path("scripts/bulldog_edge_discovery.py"),
+          ):
+              source = path.read_text(encoding="utf-8")
+              for minor in (10, 11):
+                  ast.parse(source, filename=str(path), feature_version=(3, minor))
 
       - name: Run focused regression tests
         env:
@@ -133,7 +244,7 @@ jobs:
             tail -n 200 /tmp/hardening-full-suite.log
           } > .ci-hardening-full-suite.txt
 
-      - name: Commit deterministic compatibility, formatter, and diagnostic output
+      - name: Commit deterministic hardening and diagnostic output
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -146,8 +257,8 @@ jobs:
             tests/test_bulldog_edge_discovery.py \
             .ci-hardening-full-suite.txt
           if git diff --cached --quiet; then
-            echo "No compatibility, formatter, or diagnostic changes required."
+            echo "No hardening or diagnostic changes required."
           else
-            git commit -m "fix: restore Python 3.10 and 3.11 compatibility"
+            git commit -m "fix: enforce read-only research registry and compatibility"
             git push origin HEAD:codex/intel-alignment-hardening-20260716
           fi
