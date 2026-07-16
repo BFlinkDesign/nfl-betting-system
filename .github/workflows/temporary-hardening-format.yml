@@ -23,7 +23,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b  # v5.3.0
         with:
-          python-version: '3.12'
+          python-version: '3.11'
           cache: pip
 
       - name: Install pinned development tools and runtime dependencies
@@ -87,7 +87,22 @@ jobs:
             tests/test_bulldog_edge_discovery.py
           python -m compileall -q src scripts
 
-      - name: Commit deterministic formatter output
+      - name: Reproduce authoritative Python 3.11 suite and preserve evidence
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set +e
+          pytest --cov=src --cov-report=xml --cov-report=html tests/ -m "not integration and not slow" 2>&1 | tee /tmp/hardening-full-suite.log
+          status=${PIPESTATUS[0]}
+          set -e
+          {
+            echo "python=3.11"
+            echo "exit_code=${status}"
+            echo "--- final 200 log lines ---"
+            tail -n 200 /tmp/hardening-full-suite.log
+          } > .ci-hardening-full-suite.txt
+
+      - name: Commit deterministic formatter and diagnostic output
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -97,10 +112,11 @@ jobs:
             scripts/bulldog_edge_discovery.py \
             tests/test_strategy_registry.py \
             tests/test_discovery_validation.py \
-            tests/test_bulldog_edge_discovery.py
+            tests/test_bulldog_edge_discovery.py \
+            .ci-hardening-full-suite.txt
           if git diff --cached --quiet; then
-            echo "No formatter changes required."
+            echo "No formatter or diagnostic changes required."
           else
-            git commit -m "style: apply pinned formatters to hardening changes"
+            git commit -m "style: format hardening changes and capture CI evidence"
             git push origin HEAD:codex/intel-alignment-hardening-20260716
           fi
