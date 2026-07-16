@@ -1,0 +1,1 @@
+Trigger the already-installed temporary hardening workflow after its workflow definition exists on the branch.
