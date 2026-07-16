@@ -178,7 +178,9 @@ class DailyPicksGenerator:
             "candidate_count": len(picks),
             "candidates": picks,
         }
-        output.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        output.write_text(
+            json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8"
+        )
         return str(output)
 
     def print_picks_report(self, picks: List[Dict[str, Any]]) -> None:
