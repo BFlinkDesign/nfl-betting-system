@@ -41,6 +41,9 @@ jobs:
         run: |
           from pathlib import Path
 
+          def block(*lines: str) -> str:
+              return "\n".join(lines) + "\n"
+
           def replace_once(path: Path, old: str, new: str) -> None:
               text = path.read_text(encoding="utf-8")
               if new in text:
@@ -54,74 +57,82 @@ jobs:
           registry_path = Path("src/strategy_registry.py")
           replace_once(
               registry_path,
-              '''    def __init__(self, registry_path: str | Path | None = None):
-          self.registry_path = (
-              DEFAULT_REGISTRY_PATH if registry_path is None else Path(registry_path)
-          )
-          self.strategies: Dict[str, Strategy] = {}
-          self._fingerprint: Optional[str] = None
-          self._load_registry()
-          ''',
-              '''    def __init__(
-              self, registry_path: str | Path | None = None, *, read_only: bool = False
-          ):
-              self.registry_path = (
-                  DEFAULT_REGISTRY_PATH if registry_path is None else Path(registry_path)
-              )
-              self.read_only = read_only
-              self.strategies: Dict[str, Strategy] = {}
-              self._fingerprint: Optional[str] = None
-              self._load_registry()
-          ''',
-          )
-          replace_once(
-              registry_path,
-              '''        if not self.registry_path.exists():
-              self.strategies = {}
-              self._fingerprint = None
-              self._persist({})
-              return
-          ''',
-              '''        if not self.registry_path.exists():
-              self.strategies = {}
-              self._fingerprint = None
-              if not self.read_only:
-                  self._persist({})
-              return
-          ''',
+              block(
+                  "    def __init__(self, registry_path: str | Path | None = None):",
+                  "        self.registry_path = (",
+                  "            DEFAULT_REGISTRY_PATH if registry_path is None else Path(registry_path)",
+                  "        )",
+                  "        self.strategies: Dict[str, Strategy] = {}",
+                  "        self._fingerprint: Optional[str] = None",
+                  "        self._load_registry()",
+              ),
+              block(
+                  "    def __init__(",
+                  "        self, registry_path: str | Path | None = None, *, read_only: bool = False",
+                  "    ):",
+                  "        self.registry_path = (",
+                  "            DEFAULT_REGISTRY_PATH if registry_path is None else Path(registry_path)",
+                  "        )",
+                  "        self.read_only = read_only",
+                  "        self.strategies: Dict[str, Strategy] = {}",
+                  "        self._fingerprint: Optional[str] = None",
+                  "        self._load_registry()",
+              ),
           )
           replace_once(
               registry_path,
-              '''    def _persist(self, strategies: Dict[str, Strategy]) -> None:
-              self.registry_path.parent.mkdir(parents=True, exist_ok=True)
-          ''',
-              '''    def _persist(self, strategies: Dict[str, Strategy]) -> None:
-              if self.read_only:
-                  raise RegistryPersistenceError("registry is open in read-only mode")
-              self.registry_path.parent.mkdir(parents=True, exist_ok=True)
-          ''',
+              block(
+                  "        if not self.registry_path.exists():",
+                  "            self.strategies = {}",
+                  "            self._fingerprint = None",
+                  "            self._persist({})",
+                  "            return",
+              ),
+              block(
+                  "        if not self.registry_path.exists():",
+                  "            self.strategies = {}",
+                  "            self._fingerprint = None",
+                  "            if not self.read_only:",
+                  "                self._persist({})",
+                  "            return",
+              ),
           )
           replace_once(
               registry_path,
-              '''            base_id = re.sub(r"_v\\d+$", "", original.strategy_id)
-          new_id = f"{base_id}_v{new_version}"
-          if new_id in self.strategies:
-              return False, f"Strategy ID {new_id} already exists"
-
-          new_strategy = Strategy(
-              strategy_id=new_id,
-              name=f"{re.sub(r' \\(v\\d+\\)$', '', original.name)} (v{new_version})",
-          ''',
-              '''            base_id = re.sub(r"_v\\d+$", "", original.strategy_id)
-          new_id = f"{base_id}_v{new_version}"
-          if new_id in self.strategies:
-              return False, f"Strategy ID {new_id} already exists"
-
-          base_name = re.sub(r" \\(v\\d+\\)$", "", original.name)
-          new_strategy = Strategy(
-              strategy_id=new_id,
-              name=f"{base_name} (v{new_version})",
-          ''',
+              block(
+                  "    def _persist(self, strategies: Dict[str, Strategy]) -> None:",
+                  "        self.registry_path.parent.mkdir(parents=True, exist_ok=True)",
+              ),
+              block(
+                  "    def _persist(self, strategies: Dict[str, Strategy]) -> None:",
+                  '        if self.read_only:',
+                  '            raise RegistryPersistenceError("registry is open in read-only mode")',
+                  "        self.registry_path.parent.mkdir(parents=True, exist_ok=True)",
+              ),
+          )
+          replace_once(
+              registry_path,
+              block(
+                  '            base_id = re.sub(r"_v\\d+$", "", original.strategy_id)',
+                  '            new_id = f"{base_id}_v{new_version}"',
+                  "            if new_id in self.strategies:",
+                  '                return False, f"Strategy ID {new_id} already exists"',
+                  "",
+                  "            new_strategy = Strategy(",
+                  "                strategy_id=new_id,",
+                  "                name=f\"{re.sub(r' \\(v\\d+\\)$', '', original.name)} (v{new_version})\",",
+              ),
+              block(
+                  '            base_id = re.sub(r"_v\\d+$", "", original.strategy_id)',
+                  '            new_id = f"{base_id}_v{new_version}"',
+                  "            if new_id in self.strategies:",
+                  '                return False, f"Strategy ID {new_id} already exists"',
+                  "",
+                  '            base_name = re.sub(r" \\(v\\d+\\)$", "", original.name)',
+                  "            new_strategy = Strategy(",
+                  "                strategy_id=new_id,",
+                  '                name=f"{base_name} (v{new_version})",',
+              ),
           )
 
           bulldog_path = Path("scripts/bulldog_edge_discovery.py")
@@ -129,64 +140,71 @@ jobs:
           if "# noqa: E402" not in bulldog_text:
               replace_once(
                   bulldog_path,
-                  '''PROJECT_ROOT = Path(__file__).resolve().parent.parent
-          sys.path.insert(0, str(PROJECT_ROOT))
-
-          import pandas as pd
-          from scipy import stats
-
-          from src.discovery_validation import benjamini_hochberg, wilson_lower_bound
-          from src.strategy_registry import StrategyRegistry
-          ''',
-                  '''import pandas as pd
-          from scipy import stats
-
-          PROJECT_ROOT = Path(__file__).resolve().parent.parent
-          sys.path.insert(0, str(PROJECT_ROOT))
-
-          from src.discovery_validation import benjamini_hochberg  # noqa: E402
-          from src.discovery_validation import wilson_lower_bound  # noqa: E402
-          from src.strategy_registry import StrategyRegistry  # noqa: E402
-          ''',
+                  block(
+                      "PROJECT_ROOT = Path(__file__).resolve().parent.parent",
+                      "sys.path.insert(0, str(PROJECT_ROOT))",
+                      "",
+                      "import pandas as pd",
+                      "from scipy import stats",
+                      "",
+                      "from src.discovery_validation import benjamini_hochberg, wilson_lower_bound",
+                      "from src.strategy_registry import StrategyRegistry",
+                  ),
+                  block(
+                      "import pandas as pd",
+                      "from scipy import stats",
+                      "",
+                      "PROJECT_ROOT = Path(__file__).resolve().parent.parent",
+                      "sys.path.insert(0, str(PROJECT_ROOT))",
+                      "",
+                      "from src.discovery_validation import benjamini_hochberg  # noqa: E402",
+                      "from src.discovery_validation import wilson_lower_bound  # noqa: E402",
+                      "from src.strategy_registry import StrategyRegistry  # noqa: E402",
+                  ),
               )
           replace_once(
               bulldog_path,
-              '''        self._finalized = False
-          self.registry = StrategyRegistry(registry_path)
-          ''',
-              '''        self._finalized = False
-          self.registry = StrategyRegistry(registry_path, read_only=True)
-          ''',
+              block(
+                  "        self._finalized = False",
+                  "        self.registry = StrategyRegistry(registry_path)",
+              ),
+              block(
+                  "        self._finalized = False",
+                  "        self.registry = StrategyRegistry(registry_path, read_only=True)",
+              ),
           )
 
           registry_test_path = Path("tests/test_strategy_registry.py")
           registry_test = registry_test_path.read_text(encoding="utf-8")
           if "test_read_only_registry_does_not_create_or_mutate_state" not in registry_test:
-              registry_test += '''
-
-          def test_read_only_registry_does_not_create_or_mutate_state(tmp_path):
-              path = tmp_path / "registry.json"
-              registry = StrategyRegistry(path, read_only=True)
-
-              assert not path.exists()
-              success, message = registry.add_strategy(make_strategy())
-              assert not success
-              assert "read-only mode" in message
-              assert registry.strategies == {}
-              assert not path.exists()
-          '''
+              registry_test += block(
+                  "",
+                  "",
+                  "def test_read_only_registry_does_not_create_or_mutate_state(tmp_path):",
+                  '    path = tmp_path / "registry.json"',
+                  "    registry = StrategyRegistry(path, read_only=True)",
+                  "",
+                  "    assert not path.exists()",
+                  "    success, message = registry.add_strategy(make_strategy())",
+                  "    assert not success",
+                  '    assert "read-only mode" in message',
+                  "    assert registry.strategies == {}",
+                  "    assert not path.exists()",
+              )
               registry_test_path.write_text(registry_test, encoding="utf-8")
 
           bulldog_test_path = Path("tests/test_bulldog_edge_discovery.py")
           replace_once(
               bulldog_test_path,
-              '''    assert discovery.edges_found == []
-          assert discovery.registry.get_stats()["total"] == 0
-          ''',
-              '''    assert discovery.edges_found == []
-          assert discovery.registry.get_stats()["total"] == 0
-          assert not (tmp_path / "registry.json").exists()
-          ''',
+              block(
+                  "    assert discovery.edges_found == []",
+                  '    assert discovery.registry.get_stats()["total"] == 0',
+              ),
+              block(
+                  "    assert discovery.edges_found == []",
+                  '    assert discovery.registry.get_stats()["total"] == 0',
+                  '    assert not (tmp_path / "registry.json").exists()',
+              ),
           )
 
       - name: Apply pinned formatters to the bounded change set
