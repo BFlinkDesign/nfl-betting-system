@@ -137,9 +137,7 @@ class DailyPicksGenerator:
         receipt = result["receipts"][0]
         status = receipt.get("status", "NO_BET")
         return {
-            "recommendation": (
-                "PAPER TRACK" if status == "PAPER_TRACK" else "NO BET"
-            ),
+            "recommendation": ("PAPER TRACK" if status == "PAPER_TRACK" else "NO BET"),
             "status": status,
             "game": game_label,
             "reason": (
@@ -245,15 +243,11 @@ def main() -> int:
             **_blocked_payload(),
             "reason": f"invalid_input:{exc}",
         }
-        output.write_text(
-            json.dumps(error, indent=2, sort_keys=True), encoding="utf-8"
-        )
+        output.write_text(json.dumps(error, indent=2, sort_keys=True), encoding="utf-8")
         print(json.dumps(error, indent=2, sort_keys=True))
         return 64
 
-    output.write_text(
-        json.dumps(result, indent=2, sort_keys=True), encoding="utf-8"
-    )
+    output.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
     print(json.dumps(result["summary"], indent=2, sort_keys=True))
     return 0
 
