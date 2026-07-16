@@ -3,7 +3,6 @@ import json
 import pytest
 
 import src.strategy_registry as strategy_registry_module
-
 from src.strategy_registry import (
     EvidenceStatus,
     RegistryCorruptionError,
@@ -101,9 +100,7 @@ def test_invalid_update_is_rejected_and_original_is_preserved(tmp_path):
 
 def test_version_creation_is_single_transaction(tmp_path, monkeypatch):
     registry = StrategyRegistry(tmp_path / "registry.json")
-    assert registry.add_strategy(
-        make_strategy(status=StrategyStatus.ACCEPTED.value)
-    )[0]
+    assert registry.add_strategy(make_strategy(status=StrategyStatus.ACCEPTED.value))[0]
     original_snapshot = registry.strategies["home_favorites_v1"].to_dict()
 
     def fail(_strategies):
@@ -138,9 +135,7 @@ def test_deployable_filter_requires_evidence_maturity(tmp_path):
         )
     )[0]
 
-    assert [s.strategy_id for s in registry.get_deployable_strategies()] == [
-        "paper_v1"
-    ]
+    assert [s.strategy_id for s in registry.get_deployable_strategies()] == ["paper_v1"]
 
 
 def test_active_writer_lock_fails_closed(tmp_path, monkeypatch):

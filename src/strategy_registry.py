@@ -604,9 +604,7 @@ class StrategyRegistry:
                 roi=updated_metrics.get("roi", original.roi),
                 sample_size=updated_metrics.get("sample_size", original.sample_size),
                 edge=updated_metrics.get("edge", original.edge),
-                sharpe_ratio=updated_metrics.get(
-                    "sharpe_ratio", original.sharpe_ratio
-                ),
+                sharpe_ratio=updated_metrics.get("sharpe_ratio", original.sharpe_ratio),
                 status=StrategyStatus.PENDING.value,
                 conditions=deepcopy(original.conditions),
                 version=new_version,

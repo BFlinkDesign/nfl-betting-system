@@ -3,7 +3,6 @@ from pathlib import Path
 
 import pandas as pd
 
-
 SCRIPT_PATH = Path(__file__).parents[1] / "scripts" / "bulldog_edge_discovery.py"
 spec = importlib.util.spec_from_file_location("bulldog_edge_discovery", SCRIPT_PATH)
 module = importlib.util.module_from_spec(spec)

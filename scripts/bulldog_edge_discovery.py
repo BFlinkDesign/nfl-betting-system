@@ -14,19 +14,24 @@ import sys
 from pathlib import Path
 from typing import Any, Optional
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
-
 import pandas as pd
 from scipy import stats
 
-from src.discovery_validation import benjamini_hochberg, wilson_lower_bound
-from src.strategy_registry import StrategyRegistry
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.discovery_validation import (  # noqa: E402
+    benjamini_hochberg,
+    wilson_lower_bound,
+)
+from src.strategy_registry import StrategyRegistry  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
-DEFAULT_DATA_PATH = PROJECT_ROOT / "data" / "processed" / "features_2016_2024_improved.parquet"
+DEFAULT_DATA_PATH = (
+    PROJECT_ROOT / "data" / "processed" / "features_2016_2024_improved.parquet"
+)
 DEFAULT_REPORT_DIR = PROJECT_ROOT / "reports"
 
 
@@ -62,9 +67,7 @@ class BulldogEdgeDiscovery:
             if missing:
                 raise ValueError(f"missing required columns: {', '.join(missing)}")
 
-            data = data[
-                data["home_score"].notna() & data["away_score"].notna()
-            ].copy()
+            data = data[data["home_score"].notna() & data["away_score"].notna()].copy()
             if data.empty:
                 raise ValueError("no completed games are available")
 
@@ -117,9 +120,7 @@ class BulldogEdgeDiscovery:
         wins = int(selected.astype(int).sum())
         win_rate = wins / total
         p_value = float(
-            stats.binomtest(
-                wins, total, null_probability, alternative="greater"
-            ).pvalue
+            stats.binomtest(wins, total, null_probability, alternative="greater").pvalue
         )
         sample = self.data.loc[valid]
 
@@ -308,7 +309,9 @@ class BulldogEdgeDiscovery:
                 outcome_definition="home team won outright; no moneyline price evaluated",
             )
         if {"injury_count_home", "injury_count_away"}.issubset(self.data.columns):
-            injury_diff = self.data["injury_count_home"] - self.data["injury_count_away"]
+            injury_diff = (
+                self.data["injury_count_home"] - self.data["injury_count_away"]
+            )
             self.test_hypothesis(
                 "Fade Home Team: 5+ More Injuries",
                 injury_diff >= 5,
@@ -409,7 +412,9 @@ class BulldogEdgeDiscovery:
             self.data = original_data
             self.analysis_window = original_window
 
-    def finalize_results(self, max_adjusted_p_value: float = 0.05) -> list[dict[str, Any]]:
+    def finalize_results(
+        self, max_adjusted_p_value: float = 0.05
+    ) -> list[dict[str, Any]]:
         """Apply FDR correction and classify research candidates read-only."""
 
         if not self.hypotheses:
@@ -467,7 +472,9 @@ class BulldogEdgeDiscovery:
         logger.info("%s", "=" * 80)
         logger.info("Tests attempted: %s", self.tests_run)
         logger.info("Evaluable hypotheses: %s", len(self.hypotheses))
-        logger.info("FDR-passing research candidates: %s", len(self.research_candidates))
+        logger.info(
+            "FDR-passing research candidates: %s", len(self.research_candidates)
+        )
         logger.info("Registry writes: 0 (enforced)")
 
         self.report_dir.mkdir(parents=True, exist_ok=True)

@@ -93,9 +93,7 @@ def benjamini_hochberg(p_values: Iterable[float]) -> list[float]:
     return adjusted
 
 
-def wilson_lower_bound(
-    wins: int, total: int, confidence_level: float = 0.95
-) -> float:
+def wilson_lower_bound(wins: int, total: int, confidence_level: float = 0.95) -> float:
     """Lower bound of a two-sided Wilson score interval for a binomial rate."""
 
     if isinstance(wins, bool) or isinstance(total, bool):
@@ -150,9 +148,7 @@ def assess_promotion(
         raise ValueError("adjusted_p_value must be between 0 and 1")
 
     lower_bound = (
-        wilson_lower_bound(
-            holdout_wins, holdout_sample_size, policy.confidence_level
-        )
+        wilson_lower_bound(holdout_wins, holdout_sample_size, policy.confidence_level)
         if holdout_sample_size > 0
         else 0.0
     )
