@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
+
 from src.backtesting.engine import BacktestContractError, BacktestEngine
 
 
@@ -72,7 +73,9 @@ def test_backtest_uses_lower_bound_and_logs_no_bet() -> None:
     assert metrics["total_staked"] == pytest.approx(100.0)
     assert metrics["total_profit"] == pytest.approx(100.0)
     assert metrics["roi_on_staked_capital"] == pytest.approx(100.0)
-    assert metrics["avg_closing_price_value"] == pytest.approx((2.0 / 1.8 - 1.0) * 100)
+    assert metrics["avg_closing_price_value"] == pytest.approx(
+        (2.0 / 1.8 - 1.0) * 100
+    )
     assert list(history["decision_status"]) == ["PAPER_TRACK", "NO_BET"]
     assert list(history["paper_stake"]) == [pytest.approx(100.0), 0.0]
 
