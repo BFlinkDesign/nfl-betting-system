@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
-from src.agents.base_agent import AgentCapability, BaseAgent
+from src.agents.base_agent import AgentCapability, AgentMessage, BaseAgent
 from src.api.request_orchestrator import Priority, RequestOrchestrator
 
 logger = logging.getLogger(__name__)
@@ -272,13 +272,15 @@ class LoggingAgent(BaseAgent):
 
     async def _get_logs(self, level: str = None, limit: int = 100) -> Dict[str, Any]:
         filtered = (
-            self.logs if not level else [l for l in self.logs if l["level"] == level]
+            self.logs
+            if not level
+            else [entry for entry in self.logs if entry["level"] == level]
         )
         return {"logs": filtered[-limit:], "count": len(filtered)}
 
 
 class SelfHealingAgent(BaseAgent):
-    """Self-Healing Agent - Detect & fix system issues."""
+    """Self-Healing Agent — detects anomalies via MonitoringLayer and remediates."""
 
     def __init__(self):
         super().__init__(
@@ -289,20 +291,62 @@ class SelfHealingAgent(BaseAgent):
         self.register_tool("detect_issues", self._detect_issues, "Detect system issues")
         self.register_tool("fix_issue", self._fix_issue, "Fix an issue")
 
+        self._monitoring = None
+        self._anomaly_detector = None
+        self._remediation = None
+
+    def _ensure_deps(self):
+        if self._monitoring is None:
+            from src.self_healing import (
+                AnomalyDetector,
+                AutoRemediation,
+                MonitoringLayer,
+            )
+
+            self._monitoring = MonitoringLayer()
+            self._anomaly_detector = AnomalyDetector(self._monitoring)
+            self._remediation = AutoRemediation()
+
     async def run(self):
         while self.running:
             try:
                 issues = await self._detect_issues()
                 for issue in issues:
-                    await self._fix_issue(issue)
-                await asyncio.sleep(300)
+                    result = await self._fix_issue(issue)
+                    if not result.get("fixed"):
+                        logger.warning(
+                            "Self-healing could not fix: %s", issue.get("type")
+                        )
+                        await self.send_message_async(
+                            AgentMessage(
+                                receiver_id="orchestrator_001",
+                                message_type="alert",
+                                content={
+                                    "alert": {
+                                        "severity": "high",
+                                        "message": f"Unresolved issue: {issue.get('type')}",
+                                    }
+                                },
+                            )
+                        )
+                await asyncio.sleep(60)
+            except asyncio.CancelledError:
+                break
             except Exception as e:
-                logger.error(f"Self-Healing error: {e}")
+                logger.error("Self-Healing error: %s", e, exc_info=True)
                 await asyncio.sleep(10)
 
     async def _detect_issues(self) -> List[Dict[str, Any]]:
-        return []
+        self._ensure_deps()
+        try:
+            self._monitoring.collect_system_metrics()
+            anomalies = self._anomaly_detector.detect_anomalies()
+            return anomalies if anomalies else []
+        except Exception as e:
+            logger.error("Anomaly detection failed: %s", e)
+            return []
 
     async def _fix_issue(self, issue: Dict[str, Any]) -> Dict[str, Any]:
-        logger.info(f"Fixing issue: {issue.get('type')}")
-        return {"fixed": True, "issue_id": issue.get("id")}
+        self._ensure_deps()
+        logger.info("Attempting to fix issue: %s", issue.get("type"))
+        return self._remediation.remediate(issue)

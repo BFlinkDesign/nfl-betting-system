@@ -13,6 +13,7 @@ Features:
 
 import base64
 import hashlib
+import os
 import secrets
 import smtplib
 import sqlite3
@@ -38,9 +39,9 @@ except ImportError:
 # CONFIGURATION
 # =============================================================================
 
-ADMIN_EMAIL = "b_flink@hotmail.com"
-ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "Stevie2019!"  # Will be hashed in DB
+ADMIN_EMAIL = os.environ.get("NFL_ADMIN_EMAIL", "admin@example.com")
+ADMIN_USERNAME = os.environ.get("NFL_ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.environ.get("NFL_ADMIN_PASSWORD", secrets.token_urlsafe(16))
 
 DB_PATH = Path(__file__).parent.parent / "data" / "auth.db"
 
@@ -133,7 +134,7 @@ def init_auth_db():
 
         print(f"✅ Admin account created: {ADMIN_EMAIL}")
     except sqlite3.IntegrityError:
-        print(f"ℹ️  Admin account already exists")
+        print("ℹ️  Admin account already exists")
 
     conn.commit()
     conn.close()
@@ -265,7 +266,7 @@ def generate_reset_token(email):
 
     cursor.execute(
         """
-        UPDATE users 
+        UPDATE users
         SET reset_token = ?, reset_token_expires = ?
         WHERE email = ?
     """,
@@ -329,14 +330,14 @@ def send_reset_email(email, token):
 
     st.info(f"""
     📧 **Password Reset Email Sent!**
-    
+
     (In production, this would be sent to: {email})
-    
+
     **Reset Link (valid for 1 hour):**
     ```
     {reset_link}
     ```
-    
+
     Copy this link and paste it in your browser to reset your password.
     """)
 
@@ -405,7 +406,7 @@ def get_user_settings(user_id):
     cursor = conn.cursor()
     cursor.execute(
         """
-        SELECT bankroll, risk_profile, min_edge, min_probability, 
+        SELECT bankroll, risk_profile, min_edge, min_probability,
                notifications_enabled, theme
         FROM user_settings WHERE user_id = ?
     """,
@@ -494,7 +495,7 @@ def add_tracked_bet(
 
     cursor.execute(
         """
-        INSERT INTO tracked_bets 
+        INSERT INTO tracked_bets
         (user_id, game_id, game_description, bet_type, bet_size, odds, notes)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     """,

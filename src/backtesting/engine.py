@@ -1,10 +1,11 @@
 """Walk-forward backtesting engine.
 
 Simulates betting on historical games with realistic constraints.
+Supports single-pass backtesting and Monte Carlo confidence intervals.
 """
 
 import logging
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -18,13 +19,6 @@ class BacktestEngine:
     """Walk-forward backtest with Kelly criterion."""
 
     def __init__(self, initial_bankroll: float = 10000, config: dict = None):
-        """
-        Initialize engine.
-
-        Args:
-            initial_bankroll: Starting bankroll
-            config: Configuration from config.yaml
-        """
         self.initial_bankroll = initial_bankroll
         self.config = config or {}
 
@@ -40,7 +34,7 @@ class BacktestEngine:
     def reset(self):
         """Reset state."""
         self.bankroll = self.initial_bankroll
-        self.history = []
+        self.history: List[Dict] = []
         self.bet_count = 0
         self.win_count = 0
 
@@ -49,36 +43,28 @@ class BacktestEngine:
         Run backtest on predictions.
 
         Args:
-            predictions_df: DataFrame with:
-                - game_id, gameday, home_team, away_team
-                - pred_prob: Model probability (0-1)
-                - actual: Actual outcome (0 or 1)
-                - odds: Decimal odds
+            predictions_df: DataFrame with game_id, gameday, home_team, away_team,
+                pred_prob (0-1), actual (0 or 1), odds (decimal).
 
         Returns:
             (metrics_dict, history_df)
         """
         self.reset()
 
-        logger.info(f"Running backtest on {len(predictions_df)} games...")
+        logger.info("Running backtest on %d games...", len(predictions_df))
 
-        # Sort by date
         predictions_df = predictions_df.sort_values("gameday")
 
-        for idx, row in predictions_df.iterrows():
-            # Calculate bet size
+        for _, row in predictions_df.iterrows():
             bet_size = self.kelly.calculate_bet_size(
                 prob_win=row["pred_prob"], odds=row["odds"], bankroll=self.bankroll
             )
 
-            # Skip if no bet
             if bet_size <= 0:
                 continue
 
-            # Place bet
             self.bet_count += 1
 
-            # Determine outcome
             if row["actual"] == 1:
                 profit = bet_size * (row["odds"] - 1)
                 self.win_count += 1
@@ -87,13 +73,10 @@ class BacktestEngine:
                 profit = -bet_size
                 result = "loss"
 
-            # Update bankroll
             self.bankroll += profit
 
-            # Calculate CLV
-            clv = (row["pred_prob"] * row["odds"]) - 1
+            edge = row["pred_prob"] - (1.0 / row["odds"])
 
-            # Record
             self.history.append(
                 {
                     "game_id": row["game_id"],
@@ -107,18 +90,77 @@ class BacktestEngine:
                     "result": result,
                     "profit": profit,
                     "bankroll": self.bankroll,
-                    "clv": clv,
+                    "edge": edge,
                 }
             )
 
-        # Calculate metrics
         metrics, history_df = self._calculate_metrics()
 
         logger.info(
-            f"✓ Backtest complete: {self.bet_count} bets, {self.win_count} wins"
+            "Backtest complete: %d bets, %d wins", self.bet_count, self.win_count
         )
 
         return metrics, history_df
+
+    def run_monte_carlo(
+        self,
+        predictions_df: pd.DataFrame,
+        n_simulations: int = 1000,
+        seed: int = 42,
+    ) -> Dict:
+        """
+        Run Monte Carlo simulation by resampling bet outcomes.
+
+        Returns distribution of ROI, max drawdown, and final bankroll across
+        `n_simulations` bootstrap samples of the bet history.
+        """
+        base_metrics, base_history = self.run_backtest(predictions_df)
+        if not self.history:
+            return {"error": "No bets to simulate", "base_metrics": base_metrics}
+
+        rng = np.random.default_rng(seed)
+        profits = np.array([h["profit"] for h in self.history])
+        n_bets = len(profits)
+
+        sim_rois = []
+        sim_drawdowns = []
+        sim_finals = []
+
+        for _ in range(n_simulations):
+            indices = rng.choice(n_bets, size=n_bets, replace=True)
+            sim_profits = profits[indices]
+            sim_bankroll = np.cumsum(sim_profits) + self.initial_bankroll
+
+            final = float(sim_bankroll[-1])
+            roi = (final - self.initial_bankroll) / self.initial_bankroll * 100.0
+
+            cummax = np.maximum.accumulate(sim_bankroll)
+            drawdowns = (sim_bankroll - cummax) / cummax
+            max_dd = float(drawdowns.min()) * 100.0
+
+            sim_rois.append(roi)
+            sim_drawdowns.append(max_dd)
+            sim_finals.append(final)
+
+        sim_rois = np.array(sim_rois)
+        sim_drawdowns = np.array(sim_drawdowns)
+        sim_finals = np.array(sim_finals)
+
+        return {
+            "base_metrics": base_metrics,
+            "n_simulations": n_simulations,
+            "roi_mean": float(sim_rois.mean()),
+            "roi_median": float(np.median(sim_rois)),
+            "roi_ci_5": float(np.percentile(sim_rois, 5)),
+            "roi_ci_95": float(np.percentile(sim_rois, 95)),
+            "max_drawdown_mean": float(sim_drawdowns.mean()),
+            "max_drawdown_ci_5": float(np.percentile(sim_drawdowns, 5)),
+            "max_drawdown_ci_95": float(np.percentile(sim_drawdowns, 95)),
+            "final_bankroll_mean": float(sim_finals.mean()),
+            "final_bankroll_ci_5": float(np.percentile(sim_finals, 5)),
+            "final_bankroll_ci_95": float(np.percentile(sim_finals, 95)),
+            "prob_profitable": float((sim_rois > 0).mean()),
+        }
 
     def _calculate_metrics(self) -> Tuple[Dict, pd.DataFrame]:
         """Calculate performance metrics."""
@@ -127,27 +169,26 @@ class BacktestEngine:
 
         history_df = pd.DataFrame(self.history)
 
-        # Basic metrics
         total_profit = self.bankroll - self.initial_bankroll
         roi = (total_profit / self.initial_bankroll) * 100
         win_rate = (self.win_count / self.bet_count) * 100
 
-        # Drawdown
         history_df["cumulative_max"] = history_df["bankroll"].cummax()
         history_df["drawdown"] = (
             history_df["bankroll"] - history_df["cumulative_max"]
         ) / history_df["cumulative_max"]
         max_drawdown = history_df["drawdown"].min() * 100
 
-        # Sharpe ratio (annualized, assuming ~250 betting days)
         returns = history_df["profit"] / history_df["bet_size"]
+        n_weeks = max(1, history_df["gameday"].nunique())
         sharpe = (
-            (returns.mean() / returns.std()) * np.sqrt(250) if returns.std() > 0 else 0
+            (returns.mean() / returns.std()) * np.sqrt(n_weeks)
+            if returns.std() > 0
+            else 0
         )
 
-        # CLV
-        avg_clv = history_df["clv"].mean() * 100
-        positive_clv_pct = (history_df["clv"] > 0).sum() / len(history_df) * 100
+        avg_edge = history_df["edge"].mean() * 100
+        positive_edge_pct = (history_df["edge"] > 0).sum() / len(history_df) * 100
 
         metrics = {
             "total_bets": self.bet_count,
@@ -159,8 +200,8 @@ class BacktestEngine:
             "max_drawdown": max_drawdown,
             "sharpe_ratio": sharpe,
             "final_bankroll": self.bankroll,
-            "avg_clv": avg_clv,
-            "positive_clv_pct": positive_clv_pct,
+            "avg_edge": avg_edge,
+            "positive_edge_pct": positive_edge_pct,
         }
 
         return metrics, history_df

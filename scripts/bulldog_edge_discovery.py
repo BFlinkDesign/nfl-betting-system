@@ -20,7 +20,7 @@ from scipy import stats
 
 # Import strategy registry
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-from strategy_registry import Strategy, StrategyRegistry, StrategyStatus
+from strategy_registry import Strategy, StrategyRegistry
 
 warnings.filterwarnings("ignore")
 
@@ -525,7 +525,7 @@ class BulldogEdgeDiscovery:
         logger.info(f"Duplicates skipped: {self.duplicate_strategies_count}")
 
         registry_stats = self.registry.get_stats()
-        logger.info(f"\nRegistry totals:")
+        logger.info("\nRegistry totals:")
         logger.info(f"  - Pending review: {registry_stats['pending']}")
         logger.info(f"  - Accepted: {registry_stats['accepted']}")
         logger.info(f"  - Rejected: {registry_stats['rejected']}")
@@ -581,11 +581,11 @@ class BulldogEdgeDiscovery:
         logger.info("\n" + "=" * 80)
         logger.info("BULLDOG MODE COMPLETE")
         logger.info("=" * 80)
-        logger.info(f"\nNext steps:")
+        logger.info("\nNext steps:")
         logger.info(
-            f"1. Review new strategies in dashboard: python -m streamlit run dashboard/app.py"
+            "1. Review new strategies in dashboard: python -m streamlit run dashboard/app.py"
         )
-        logger.info(f"2. Click the 'STRATEGIES' tab")
+        logger.info("2. Click the 'STRATEGIES' tab")
         logger.info(
             f"3. Accept or reject the {self.new_strategies_count} pending strategies"
         )
@@ -610,7 +610,7 @@ def main():
         f"  - {registry_stats['pending']} pending | {registry_stats['accepted']} accepted | "
         f"{registry_stats['rejected']} rejected | {registry_stats['archived']} archived"
     )
-    print(f"  - Duplicate detection enabled (85% similarity threshold)\n")
+    print("  - Duplicate detection enabled (85% similarity threshold)\n")
 
     if not bulldog.load_data():
         print("ERROR: Could not load data")

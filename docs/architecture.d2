@@ -1,0 +1,185 @@
+direction: right
+
+title: |md
+  # NFL Betting System Architecture
+| {
+  near: top-center
+  shape: text
+  style.font-size: 28
+}
+
+# ── Layers ──────────────────────────────────────────
+
+data_layer: Data Layer {
+  style.fill: "#e8f4fd"
+  style.stroke: "#1976d2"
+
+  nflverse: nflverse / nflreadpy {
+    shape: cylinder
+    style.fill: "#bbdefb"
+    tooltip: "Schedules, PBP, weekly stats (2016-present)"
+  }
+  odds_api: The Odds API {
+    shape: cylinder
+    style.fill: "#bbdefb"
+    tooltip: "Real-time odds from 20+ sportsbooks"
+  }
+  espn: ESPN API {
+    shape: cylinder
+    style.fill: "#bbdefb"
+  }
+  noaa: NOAA Weather {
+    shape: cylinder
+    style.fill: "#bbdefb"
+  }
+  pipeline: src/data_pipeline.py {
+    shape: hexagon
+    style.fill: "#42a5f5"
+    style.font-color: white
+  }
+
+  nflverse -> pipeline: parquet
+  odds_api -> pipeline: JSON
+  espn -> pipeline
+  noaa -> pipeline
+}
+
+feature_layer: Feature Engineering {
+  style.fill: "#fce4ec"
+  style.stroke: "#c62828"
+
+  elo: Elo Ratings {shape: rectangle; style.fill: "#ef9a9a"}
+  epa: EPA Metrics {shape: rectangle; style.fill: "#ef9a9a"}
+  rest: Rest Days {shape: rectangle; style.fill: "#ef9a9a"}
+  weather: Weather {shape: rectangle; style.fill: "#ef9a9a"}
+  form: Recent Form {shape: rectangle; style.fill: "#ef9a9a"}
+  injury: Injuries\n(position-weighted) {shape: rectangle; style.fill: "#ef9a9a"}
+  sos: Strength of\nSchedule {shape: rectangle; style.fill: "#e57373"}
+  market: Market\nSignals {shape: rectangle; style.fill: "#e57373"}
+  referee: Referee\n(PBP penalties) {shape: rectangle; style.fill: "#ef9a9a"}
+
+  pipeline_fe: FeaturePipeline {
+    shape: hexagon
+    style.fill: "#e53935"
+    style.font-color: white
+  }
+
+  elo -> pipeline_fe
+  epa -> pipeline_fe
+  rest -> pipeline_fe
+  weather -> pipeline_fe
+  form -> pipeline_fe
+  injury -> pipeline_fe
+  sos -> pipeline_fe
+  market -> pipeline_fe
+  referee -> pipeline_fe
+}
+
+model_layer: ML Models {
+  style.fill: "#e8f5e9"
+  style.stroke: "#2e7d32"
+
+  xgb: XGBoostNFLModel {
+    shape: rectangle
+    style.fill: "#a5d6a7"
+    tooltip: "Primary classifier: 200 trees, depth 6"
+  }
+  lgb: LightGBMModel {
+    shape: rectangle
+    style.fill: "#a5d6a7"
+    tooltip: "Fast inference, ensemble diversity"
+  }
+  calibrator: ModelCalibrator {
+    shape: rectangle
+    style.fill: "#81c784"
+    tooltip: "Platt scaling / isotonic regression"
+  }
+  ensemble: EnsembleModel {
+    shape: diamond
+    style.fill: "#66bb6a"
+    style.font-color: white
+    tooltip: "Weighted average: 0.6 XGB + 0.4 LGB"
+  }
+
+  xgb -> ensemble: "0.6"
+  lgb -> ensemble: "0.4"
+  ensemble -> calibrator: calibrate
+}
+
+betting_layer: Betting Engine {
+  style.fill: "#fff3e0"
+  style.stroke: "#e65100"
+
+  kelly: Kelly Criterion {
+    shape: rectangle
+    style.fill: "#ffcc80"
+    tooltip: "1/4 Kelly with aggressive favorites mode"
+  }
+  backtest: BacktestEngine {
+    shape: rectangle
+    style.fill: "#ffcc80"
+  }
+  monte_carlo: Monte Carlo\nSimulation {
+    shape: rectangle
+    style.fill: "#ffa726"
+    style.font-color: white
+    tooltip: "Bootstrap CIs over bet outcomes"
+  }
+
+  kelly -> backtest
+  backtest -> monte_carlo: "1000 sims"
+}
+
+agent_layer: Agent Swarms {
+  style.fill: "#f3e5f5"
+  style.stroke: "#6a1b9a"
+
+  consensus: Consensus Swarm\n(7-12 agents) {
+    shape: rectangle
+    style.fill: "#ce93d8"
+    tooltip: "Deliberation + weighted voting"
+  }
+  validation: Validation Swarm\n(3-5 agents) {
+    shape: rectangle
+    style.fill: "#ce93d8"
+    tooltip: "Cross-validation + stress testing"
+  }
+  llm: LLM Council {
+    shape: rectangle
+    style.fill: "#ab47bc"
+    style.font-color: white
+    tooltip: "OpenAI, Anthropic, Grok, Gemini, Perplexity"
+  }
+  orchestrator: Orchestrator Agent {
+    shape: hexagon
+    style.fill: "#7b1fa2"
+    style.font-color: white
+  }
+
+  orchestrator -> consensus
+  orchestrator -> validation
+  orchestrator -> llm
+}
+
+dashboard: Streamlit Dashboard {
+  style.fill: "#fffde7"
+  style.stroke: "#f57f17"
+
+  live: LIVE\nTracker {shape: rectangle; style.fill: "#fff9c4"}
+  lab: Backtesting\nLab {shape: rectangle; style.fill: "#fff9c4"}
+  parlay: Parlay\nBuilder {shape: rectangle; style.fill: "#fff9c4"}
+  strategies: Strategy\nManager {shape: rectangle; style.fill: "#fff9c4"}
+  intel: AI\nIntel {shape: rectangle; style.fill: "#fff9c4"}
+}
+
+# ── Connections between layers ──
+
+data_layer.pipeline -> feature_layer.pipeline_fe: "schedules + PBP"
+feature_layer.pipeline_fe -> model_layer.xgb: "44+ features"
+feature_layer.pipeline_fe -> model_layer.lgb: "44+ features"
+model_layer.calibrator -> betting_layer.kelly: "probabilities"
+model_layer.calibrator -> agent_layer.consensus: "predictions"
+betting_layer.backtest -> agent_layer.validation: "metrics"
+agent_layer.orchestrator -> dashboard.live: "picks"
+agent_layer.orchestrator -> dashboard.intel: "analysis"
+betting_layer.backtest -> dashboard.lab: "results"

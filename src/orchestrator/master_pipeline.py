@@ -246,10 +246,10 @@ class MasterPipeline:
         """Fetch today's games with odds from multiple sources."""
         games = []
 
-        # Get odds from The Odds API
+        # Get odds from The Odds API (blocking I/O off the event loop)
         if self.config.use_live_odds and os.getenv("ODDS_API_KEY"):
             logger.info("Fetching live odds...")
-            odds_data = self.odds_api.get_nfl_odds()
+            odds_data = await asyncio.to_thread(self.odds_api.get_nfl_odds)
 
             for game_odds in odds_data:
                 game = GameData(
@@ -289,7 +289,7 @@ class MasterPipeline:
         # Fallback to ESPN if no odds API
         if not games:
             logger.info("Fetching from ESPN...")
-            scoreboard = self.espn_api.get_scoreboard(2024)
+            scoreboard = await asyncio.to_thread(self.espn_api.get_scoreboard, 2024)
 
             for event in scoreboard.get("events", []):
                 if event.get("status", {}).get("type", {}).get("state") == "pre":
@@ -344,25 +344,19 @@ class MasterPipeline:
 
     async def get_model_prediction(self, game: GameData) -> Dict[str, Any]:
         """Get prediction from the trained ML model."""
-        model = self._load_model()
+        model = await asyncio.to_thread(self._load_model)
         if model is None:
             return {"prob": 0.5, "confidence": 0.0, "model_used": False}
 
         # Build features for this game
         # This is simplified - in production, would use full FeaturePipeline
         try:
-            from src.features.elo import EloFeatures
-            from src.features.form import FormFeatures
-
-            # Get team Elo ratings
-            elo_features = EloFeatures()
-
             # Try to get features from saved file
             features_path = (
                 PROJECT_ROOT / "data" / "features_2016_2024_improved.parquet"
             )
             if features_path.exists():
-                df = pd.read_parquet(features_path)
+                df = await asyncio.to_thread(pd.read_parquet, features_path)
 
                 # Get most recent data for these teams
                 home_data = df[df["home_team"] == game.home_team].sort_values(
@@ -733,28 +727,48 @@ class MasterPipeline:
 
 
 async def main():
-    """Main entry point for the daily pipeline."""
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(message)s",
-        datefmt="%H:%M:%S",
+    """Main entry point with startup validation, lease, and result update."""
+    from src.config.logging_config import setup_logging
+    from src.config.startup import startup_check
+    from src.utils.leader_lease import LeaderLease
+
+    setup_logging(
+        level=os.environ.get("LOG_LEVEL", "INFO"),
+        json_format=os.environ.get("LOG_FORMAT") == "json",
     )
 
-    # Load config
+    if not startup_check():
+        logger.error("Startup checks failed — aborting")
+        return []
+
+    lease = LeaderLease("daily_pipeline", ttl_seconds=300)
+    if not lease.acquire():
+        logger.error("Another daily pipeline is running — aborting")
+        return []
+
     config = PipelineConfig(
         bankroll=float(os.getenv("BANKROLL", "10000")),
         generate_visuals=True,
         save_picks_to_db=True,
     )
 
-    # Run pipeline
     pipeline = MasterPipeline(config)
 
     try:
+        # Step A: Update results from yesterday's games
+        try:
+            from src.learning.result_updater import ResultUpdater
+
+            updater = ResultUpdater()
+            updates = await asyncio.to_thread(updater.update_from_espn)
+            if updates:
+                logger.info("Updated %d prediction results from ESPN", len(updates))
+        except Exception as e:
+            logger.warning("Result update failed (non-blocking): %s", e)
+
+        # Step B: Run today's pipeline
         picks = await pipeline.run_daily_pipeline()
 
-        # Print picks to stdout for easy copy/paste
         print("\n" + "=" * 50)
         print("TODAY'S RECOMMENDED BETS")
         print("=" * 50)
@@ -775,6 +789,7 @@ async def main():
 
     finally:
         await pipeline.cleanup()
+        lease.release()
 
 
 if __name__ == "__main__":

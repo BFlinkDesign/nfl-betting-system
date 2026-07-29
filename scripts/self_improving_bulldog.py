@@ -454,7 +454,7 @@ Generate {num_hypotheses} hypotheses now:"""
 
         # Layer 1: Statistical Discovery (use existing bulldog system)
         logger.info("\nLAYER 1: STATISTICAL EDGE DISCOVERY")
-        from bulldog_edge_discovery import BulldogEdgeDiscovery
+        from scripts.bulldog_edge_discovery import BulldogEdgeDiscovery
 
         bulldog = BulldogEdgeDiscovery()
         if bulldog.load_data():

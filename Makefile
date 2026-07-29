@@ -1,7 +1,7 @@
 # Makefile for NFL Betting System
 # Cross-platform commands for development and deployment
 
-.PHONY: help install test lint format clean data train predict deploy
+.PHONY: help install test lint format clean data train predict
 
 # Default target
 help:
@@ -162,22 +162,6 @@ security-check:
 	bandit -r src/ scripts/ -f screen
 	trufflehog filesystem . --json
 
-# Docker (Future)
-docker-build:
-	docker build -t nfl-betting-system:latest .
-
-docker-run:
-	docker run -it --rm -v $$(pwd)/config:/app/config nfl-betting-system:latest
-
-# Documentation
-docs-build:
-	@echo "Building documentation..."
-	pip install mkdocs mkdocs-material
-	mkdocs build
-
-docs-serve:
-	pip install mkdocs mkdocs-material
-	mkdocs serve
 
 # Git helpers
 git-clean-secrets:
@@ -188,9 +172,6 @@ commit-check:
 	pre-commit run --all-files
 
 # Performance monitoring
-benchmark:
-	pytest tests/benchmarks/ --benchmark-only
-
 profile:
 	python -m cProfile -o profile.stats scripts/generate_daily_picks.py
 	python -m pstats profile.stats
@@ -198,9 +179,6 @@ profile:
 # API testing
 test-api:
 	python scripts/test_api_keys.py
-
-test-odds-api:
-	python scripts/test_odds_api.py
 
 # Weekly automation
 weekly-tasks:

@@ -619,14 +619,14 @@ New Features Discovered:
 
                 col_a, col_b = st.columns(2)
                 with col_a:
-                    if st.button(f"▶️ Run Now", key=f"run_{task['name']}"):
+                    if st.button("▶️ Run Now", key=f"run_{task['name']}"):
                         st.info(f"Running {task['name']}...")
                 with col_b:
                     if task["status"] == "Active":
-                        if st.button(f"⏸️ Pause", key=f"pause_{task['name']}"):
+                        if st.button("⏸️ Pause", key=f"pause_{task['name']}"):
                             st.warning(f"Paused {task['name']}")
                     else:
-                        if st.button(f"▶️ Resume", key=f"resume_{task['name']}"):
+                        if st.button("▶️ Resume", key=f"resume_{task['name']}"):
                             st.success(f"Resumed {task['name']}")
 
     # ======================================================================

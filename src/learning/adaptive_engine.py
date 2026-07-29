@@ -14,10 +14,10 @@ This is the self-improvement loop for the system.
 import json
 import logging
 import sqlite3
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
@@ -245,7 +245,7 @@ class AdaptiveEngine:
             cursor.execute(
                 """
                 UPDATE predictions
-                SET actual_result = ?, 
+                SET actual_result = ?,
                     actual_score_home = ?,
                     actual_score_away = ?,
                     profit = ?
@@ -265,7 +265,7 @@ class AdaptiveEngine:
         with sqlite3.connect(self.db_path) as conn:
             df = pd.read_sql_query(
                 """
-                SELECT * FROM predictions 
+                SELECT * FROM predictions
                 WHERE actual_result IS NOT NULL
                 ORDER BY timestamp DESC
                 LIMIT 50
@@ -300,7 +300,7 @@ class AdaptiveEngine:
                 cutoff = (datetime.now() - timedelta(days=window)).isoformat()
                 df = pd.read_sql_query(
                     f"""
-                    SELECT * FROM predictions 
+                    SELECT * FROM predictions
                     WHERE actual_result IS NOT NULL
                     AND timestamp >= '{cutoff}'
                 """,
@@ -343,7 +343,7 @@ class AdaptiveEngine:
         with sqlite3.connect(self.db_path) as conn:
             df = pd.read_sql_query(
                 """
-                SELECT * FROM predictions 
+                SELECT * FROM predictions
                 WHERE actual_result IS NOT NULL
             """,
                 conn,
@@ -446,7 +446,7 @@ class AdaptiveEngine:
         with sqlite3.connect(self.db_path) as conn:
             df = pd.read_sql_query(
                 """
-                SELECT * FROM predictions 
+                SELECT * FROM predictions
                 WHERE actual_result IS NOT NULL
             """,
                 conn,
@@ -562,7 +562,7 @@ class AdaptiveEngine:
         with sqlite3.connect(self.db_path) as conn:
             df = pd.read_sql_query(
                 """
-                SELECT * FROM predictions 
+                SELECT * FROM predictions
                 WHERE actual_result IS NOT NULL
             """,
                 conn,
@@ -576,7 +576,7 @@ class AdaptiveEngine:
         losses = (df["actual_result"] == "loss").sum()
         total = wins + losses
 
-        report.append(f"\n📊 OVERALL PERFORMANCE")
+        report.append("\n📊 OVERALL PERFORMANCE")
         report.append(f"  Total Bets: {len(df)}")
         report.append(f"  Record: {wins}-{losses}")
         report.append(
@@ -586,7 +586,7 @@ class AdaptiveEngine:
         report.append(f"  ROI: {df['profit'].sum()/len(df)*100:.1f}%")
 
         # Segment analysis
-        report.append(f"\n📈 SEGMENT ANALYSIS")
+        report.append("\n📈 SEGMENT ANALYSIS")
         segments = self.get_all_segments_analysis()
 
         for segment in segments:
@@ -607,25 +607,25 @@ class AdaptiveEngine:
             report.append(f"      Recommendation: {segment.recommendation.upper()}")
 
         # Patterns
-        report.append(f"\n🔍 PATTERN ANALYSIS")
+        report.append("\n🔍 PATTERN ANALYSIS")
         patterns = self.identify_patterns()
 
         if patterns.get("winning_patterns"):
-            report.append(f"  Winning Patterns:")
+            report.append("  Winning Patterns:")
             for p in patterns["winning_patterns"][:3]:
                 report.append(
                     f"    ✓ {p['type']}: {p.get('range', p.get('tier', ''))} - {p['win_rate']:.1%} WR"
                 )
 
         if patterns.get("losing_patterns"):
-            report.append(f"  Losing Patterns:")
+            report.append("  Losing Patterns:")
             for p in patterns["losing_patterns"][:3]:
                 report.append(
                     f"    ✗ {p['type']}: {p.get('range', p.get('tier', ''))} - {p['win_rate']:.1%} WR"
                 )
 
         if patterns.get("insights"):
-            report.append(f"\n💡 INSIGHTS")
+            report.append("\n💡 INSIGHTS")
             for insight in patterns["insights"]:
                 report.append(f"  • {insight}")
 

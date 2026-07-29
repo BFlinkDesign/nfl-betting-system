@@ -310,7 +310,7 @@ st.markdown(
     """
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
-    
+
     :root {
         --accent: #00ff88;
         --accent-dim: #00cc6a;
@@ -324,16 +324,16 @@ st.markdown(
         --text-2: #d0d0d0;
         --text-3: #909090;
     }
-    
+
     html, body, .stApp {
         background: var(--dark-1);
         color: var(--text-1);
         font-family: 'Inter', sans-serif;
     }
-    
+
     #MainMenu, footer, header {visibility: hidden;}
     .block-container { padding: 1rem 2rem; max-width: 100%; }
-    
+
     /* Scanline effect */
     .stApp::before {
         content: '';
@@ -349,7 +349,7 @@ st.markdown(
         pointer-events: none;
         z-index: 1000;
     }
-    
+
     /* Tabs - Clean, no emoji bullshit */
     .stTabs [data-baseweb="tab-list"] {
         background: var(--dark-2);
@@ -358,7 +358,7 @@ st.markdown(
         gap: 4px;
         border: 1px solid var(--dark-4);
     }
-    
+
     .stTabs [data-baseweb="tab"] {
         background: transparent;
         border-radius: 6px;
@@ -370,12 +370,12 @@ st.markdown(
         letter-spacing: 1px;
         text-transform: uppercase;
     }
-    
+
     .stTabs [aria-selected="true"] {
         background: var(--accent) !important;
         color: var(--dark-1) !important;
     }
-    
+
     /* Metrics */
     [data-testid="stMetric"] {
         background: var(--dark-2);
@@ -383,7 +383,7 @@ st.markdown(
         border-radius: 8px;
         padding: 16px;
     }
-    
+
     [data-testid="stMetricLabel"] {
         font-family: 'Rajdhani', sans-serif;
         font-size: 0.75rem !important;
@@ -391,13 +391,13 @@ st.markdown(
         color: #b0b0b0 !important;
         text-transform: uppercase;
     }
-    
+
     [data-testid="stMetricValue"] {
         font-family: 'Bebas Neue', sans-serif;
         font-size: 2rem !important;
         color: var(--text-1) !important;
     }
-    
+
     /* Buttons */
     .stButton > button {
         background: var(--accent);
@@ -410,18 +410,18 @@ st.markdown(
         border-radius: 6px;
         padding: 10px 20px;
     }
-    
+
     .stButton > button:hover {
         background: var(--accent-dim);
     }
-    
+
     /* Select boxes */
     .stSelectbox > div > div {
         background: var(--dark-2);
         border: 1px solid var(--dark-4);
         border-radius: 6px;
     }
-    
+
     /* Game Card - ENHANCED with overlay effects */
     .game-card {
         background: var(--dark-2);
@@ -433,7 +433,7 @@ st.markdown(
         position: relative;
         overflow: hidden;
     }
-    
+
     /* Scanline overlay effect */
     .game-card::after {
         content: '';
@@ -453,17 +453,17 @@ st.markdown(
         opacity: 0;
         transition: opacity 0.3s ease;
     }
-    
+
     .game-card:hover::after {
         opacity: 1;
     }
-    
+
     .game-card:hover {
         border-color: var(--accent);
         transform: translateY(-2px);
         box-shadow: 0 0 30px rgba(0, 255, 136, 0.15), 0 10px 40px rgba(0, 0, 0, 0.3);
     }
-    
+
     /* Left edge indicator */
     .game-card::before {
         content: '';
@@ -475,21 +475,21 @@ st.markdown(
         background: var(--accent);
         box-shadow: 0 0 15px var(--accent);
     }
-    
+
     .game-card.final::before { background: var(--text-3); box-shadow: none; }
-    .game-card.live::before { 
-        background: var(--danger); 
-        animation: pulse-glow 1s infinite; 
+    .game-card.live::before {
+        background: var(--danger);
+        animation: pulse-glow 1s infinite;
         box-shadow: 0 0 20px var(--danger);
     }
     .game-card.win::before { background: var(--accent); box-shadow: 0 0 15px var(--accent); }
     .game-card.loss::before { background: var(--danger); box-shadow: 0 0 15px var(--danger); }
-    
+
     @keyframes pulse-glow {
         0%, 100% { opacity: 1; box-shadow: 0 0 20px var(--danger); }
         50% { opacity: 0.6; box-shadow: 0 0 10px var(--danger); }
     }
-    
+
     /* Gradient overlay on hover */
     .game-card-overlay {
         position: absolute;
@@ -502,11 +502,11 @@ st.markdown(
         opacity: 0;
         transition: opacity 0.3s ease;
     }
-    
+
     .game-card:hover .game-card-overlay {
         opacity: 1;
     }
-    
+
     /* Slot Header */
     .slot-header {
         font-family: 'Bebas Neue', sans-serif;
@@ -517,7 +517,7 @@ st.markdown(
         margin: 24px 0 12px 0;
         border-bottom: 2px solid var(--dark-4);
     }
-    
+
     /* Team display */
     .team-row {
         display: flex;
@@ -525,27 +525,27 @@ st.markdown(
         gap: 12px;
         margin: 8px 0;
     }
-    
+
     .team-logo {
         width: 40px;
         height: 40px;
         border-radius: 50%;
         background: var(--dark-3);
     }
-    
+
     .team-name {
         font-family: 'Rajdhani', sans-serif;
         font-size: 1.15rem;
         font-weight: 700;
         color: #ffffff;
     }
-    
+
     .team-score {
         font-family: 'Bebas Neue', sans-serif;
         font-size: 1.8rem;
         margin-left: auto;
     }
-    
+
     /* Confidence meter */
     .conf-meter {
         height: 4px;
@@ -554,14 +554,14 @@ st.markdown(
         margin-top: 12px;
         overflow: hidden;
     }
-    
+
     .conf-fill {
         height: 100%;
         background: linear-gradient(90deg, var(--accent), var(--accent-dim));
         border-radius: 2px;
         transition: width 0.5s ease;
     }
-    
+
     /* Pick badge */
     .pick-badge {
         display: inline-block;
@@ -572,12 +572,12 @@ st.markdown(
         font-size: 0.8rem;
         letter-spacing: 1px;
     }
-    
+
     .pick-badge.win { background: var(--accent); color: var(--dark-1); }
     .pick-badge.loss { background: var(--danger); color: white; }
     .pick-badge.pending { background: var(--dark-4); color: var(--text-2); }
     .pick-badge.live { background: var(--danger); color: white; animation: pulse-red 1s infinite; }
-    
+
     /* No scrollbar */
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: var(--dark-1); }
@@ -1692,7 +1692,7 @@ with tab_lab:
                 <div>
                     <div style="font-family: 'Bebas Neue'; font-size: 1.4rem; color: var(--accent); margin-bottom: 8px;">SELF-IMPROVING SYSTEM</div>
                     <div style="color: var(--text-2); font-size: 0.9rem; max-width: 500px;">
-                        Walk-forward backtesting with no forward-looking bias. Models retrain weekly. 
+                        Walk-forward backtesting with no forward-looking bias. Models retrain weekly.
                         Strategy discovery runs continuously to find hidden edges.
                     </div>
                 </div>
@@ -2077,7 +2077,7 @@ with tab_lab:
                             time.sleep(0.3)
 
                         status_text.markdown(
-                            f"<span style='color: #00ff88;'>Complete!</span>",
+                            "<span style='color: #00ff88;'>Complete!</span>",
                             unsafe_allow_html=True,
                         )
 

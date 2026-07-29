@@ -2,16 +2,19 @@
 Message Bus for Agent Communication
 
 Handles routing and delivery of messages between agents.
+Bounded history, safe concurrent subscription, and duplicate-delivery guard.
 """
 
 import asyncio
 import logging
-from collections import defaultdict
-from typing import Callable, Dict, List, Optional
+from collections import defaultdict, deque
+from typing import Deque, Dict, List, Optional, Set
 
 from src.agents.base_agent import AgentMessage, BaseAgent
 
 logger = logging.getLogger(__name__)
+
+MAX_BUS_HISTORY = 50_000
 
 
 class MessageBus:
@@ -19,104 +22,93 @@ class MessageBus:
     Central message bus for agent communication.
 
     Features:
-    - Message routing
-    - Broadcast messaging
-    - Message persistence
-    - Timeout handling
+    - Targeted + type-based + broadcast routing
+    - Bounded in-memory history (ring buffer)
+    - Safe concurrent subscription via snapshot iteration
     """
 
     def __init__(self):
-        """Initialize message bus."""
         self.subscribers: Dict[str, List[BaseAgent]] = defaultdict(list)
-        self.message_history: List[AgentMessage] = []
-        self.pending_responses: Dict[str, List[Callable]] = {}
+        self.message_history: Deque[AgentMessage] = deque(maxlen=MAX_BUS_HISTORY)
         self.running = False
         self.lock = asyncio.Lock()
+        self._delivered: int = 0
+        self._dropped: int = 0
 
         logger.info("Message bus initialized")
 
     def subscribe(self, agent: BaseAgent, message_types: Optional[List[str]] = None):
-        """
-        Subscribe agent to messages.
-
-        Args:
-            agent: Agent to subscribe
-            message_types: Types to subscribe to (None = all)
-        """
         if message_types is None:
             message_types = ["*"]
-
         for msg_type in message_types:
-            self.subscribers[msg_type].append(agent)
-
-        logger.debug(f"Agent {agent.agent_id} subscribed to {message_types}")
+            if agent not in self.subscribers[msg_type]:
+                self.subscribers[msg_type].append(agent)
 
     def unsubscribe(self, agent: BaseAgent):
-        """Unsubscribe agent from all messages."""
-        for subscribers in self.subscribers.values():
-            if agent in subscribers:
-                subscribers.remove(agent)
-
-        logger.debug(f"Agent {agent.agent_id} unsubscribed")
+        for subs in self.subscribers.values():
+            try:
+                subs.remove(agent)
+            except ValueError:
+                pass
 
     async def send(self, message: AgentMessage):
-        """
-        Send a message.
-
-        Args:
-            message: Message to send
-        """
+        """Route a message to its target(s) and persist to event store."""
         async with self.lock:
             self.message_history.append(message)
+            delivered_to: Set[str] = set()
 
-            # Route to specific receiver
-            if message.receiver_id:
+            try:
+                from src.agents.event_store import get_event_store
+
+                get_event_store().record(message)
+            except Exception as e:
+                logger.warning("Event store write failed: %s", e)
+
+            if message.receiver_id and message.receiver_id != "*":
                 receiver = self._find_agent(message.receiver_id)
                 if receiver:
                     receiver.receive_message(message)
+                    delivered_to.add(receiver.agent_id)
                 else:
-                    logger.warning(f"Receiver {message.receiver_id} not found")
+                    logger.warning("Receiver %s not found", message.receiver_id)
+                    self._dropped += 1
 
-            # Broadcast to subscribers
-            if message.message_type in self.subscribers:
-                for subscriber in self.subscribers[message.message_type]:
-                    if subscriber.agent_id != message.sender_id:
-                        subscriber.receive_message(message)
+            for msg_type in (message.message_type, "*"):
+                for sub in list(self.subscribers.get(msg_type, [])):
+                    if (
+                        sub.agent_id != message.sender_id
+                        and sub.agent_id not in delivered_to
+                    ):
+                        sub.receive_message(message)
+                        delivered_to.add(sub.agent_id)
 
-            # Broadcast to all subscribers
-            if "*" in self.subscribers:
-                for subscriber in self.subscribers["*"]:
-                    if subscriber.agent_id != message.sender_id:
-                        subscriber.receive_message(message)
-
-            logger.debug(f"Message {message.message_id} routed")
+            self._delivered += len(delivered_to)
 
     async def broadcast(self, message: AgentMessage):
-        """
-        Broadcast message to all agents.
-
-        Args:
-            message: Message to broadcast
-        """
-        message.receiver_id = "*"  # Broadcast marker
+        message.receiver_id = "*"
         await self.send(message)
 
     def _find_agent(self, agent_id: str) -> Optional[BaseAgent]:
-        """Find agent by ID."""
         from src.agents.base_agent import agent_registry
 
         return agent_registry.get(agent_id)
 
     def get_message_history(self, agent_id: Optional[str] = None) -> List[AgentMessage]:
-        """Get message history, optionally filtered by agent."""
         if agent_id:
             return [
                 m
                 for m in self.message_history
                 if m.sender_id == agent_id or m.receiver_id == agent_id
             ]
-        return self.message_history
+        return list(self.message_history)
+
+    def get_stats(self) -> Dict:
+        return {
+            "history_size": len(self.message_history),
+            "delivered": self._delivered,
+            "dropped": self._dropped,
+            "subscriber_types": len(self.subscribers),
+        }
 
 
-# Global message bus instance
 message_bus = MessageBus()
