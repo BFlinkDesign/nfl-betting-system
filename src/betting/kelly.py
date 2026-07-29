@@ -1,23 +1,29 @@
-"""Kelly Criterion for optimal bet sizing.
+"""Conservative Kelly analysis with an explicit execution authority boundary.
 
-Formula: f = (p*b - q) / b
-where:
-  f = fraction of bankroll to bet
-  p = probability of winning
-  b = odds - 1 (e.g., 0.91 for 1.91 decimal odds)
-  q = 1 - p (probability of losing)
-
-We use 1/4 Kelly to reduce variance.
-With aggressive mode: Multipliers for favorites (our proven strength).
+The previous implementation amplified favorite bets and recent winning streaks
+using historical claims that are not independently reproducible. This module
+removes those multipliers. It can calculate a capped analytical fraction from a
+qualified probability lower bound, but dollar bet sizing is blocked unless the
+caller explicitly enters live mode, supplies live-validated evidence, and
+provides one-time execution authorization.
 """
 
-import logging
+from __future__ import annotations
 
-logger = logging.getLogger(__name__)
+import math
+from typing import Optional
+
+QUALIFIED_ANALYSIS_STATUSES = frozenset(
+    {"out_of_sample_validated", "paper_trading", "live_validated"}
+)
+
+
+class BetSizingBlockedError(RuntimeError):
+    """Raised when a caller attempts actionable sizing without authority."""
 
 
 class KellyCriterion:
-    """Kelly criterion calculator with aggressive sizing for favorites."""
+    """Fail-closed fractional Kelly calculator."""
 
     def __init__(
         self,
@@ -25,102 +31,143 @@ class KellyCriterion:
         min_edge: float = 0.02,
         min_probability: float = 0.55,
         max_bet_pct: float = 0.02,
-        aggressive_mode: bool = True,
-    ):
-        """
-        Initialize Kelly calculator.
+        aggressive_mode: bool = False,
+        deployment_mode: str = "paper",
+    ) -> None:
+        if aggressive_mode:
+            raise ValueError(
+                "aggressive_mode was removed: favorite and hot-streak multipliers "
+                "are not supported by reproducible evidence"
+            )
+        for name, value in {
+            "kelly_fraction": kelly_fraction,
+            "min_edge": min_edge,
+            "min_probability": min_probability,
+            "max_bet_pct": max_bet_pct,
+        }.items():
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError(f"{name} must be numeric")
+            if not math.isfinite(float(value)):
+                raise ValueError(f"{name} must be finite")
+        if not 0.0 < float(kelly_fraction) <= 1.0:
+            raise ValueError("kelly_fraction must be greater than zero and at most one")
+        if not 0.0 <= float(min_edge) < 1.0:
+            raise ValueError("min_edge must be between zero and one")
+        if not 0.0 < float(min_probability) < 1.0:
+            raise ValueError("min_probability must be between zero and one")
+        if not 0.0 < float(max_bet_pct) <= 0.02:
+            raise ValueError("max_bet_pct must be greater than zero and at most 2%")
+        if deployment_mode not in {"paper", "live"}:
+            raise ValueError("deployment_mode must be 'paper' or 'live'")
 
-        Args:
-            kelly_fraction: Fraction of Kelly to use (0.25 = 1/4 Kelly)
-            min_edge: Minimum edge required (2%)
-            min_probability: Minimum probability to bet (55%)
-            max_bet_pct: Maximum bet as % of bankroll (2%)
-            aggressive_mode: Use aggressive multipliers for favorites (our strength)
+        self.kelly_fraction = float(kelly_fraction)
+        self.min_edge = float(min_edge)
+        self.min_probability = float(min_probability)
+        self.max_bet_pct = float(max_bet_pct)
+        self.deployment_mode = deployment_mode
+
+    @staticmethod
+    def _validate_probability(value: float, name: str) -> float:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"{name} must be numeric")
+        probability = float(value)
+        if not math.isfinite(probability) or not 0.0 <= probability <= 1.0:
+            raise ValueError(f"{name} must be between zero and one")
+        return probability
+
+    @staticmethod
+    def _validate_decimal_odds(odds: float) -> float:
+        if isinstance(odds, bool) or not isinstance(odds, (int, float)):
+            raise ValueError("odds must be numeric decimal odds")
+        decimal_odds = float(odds)
+        if not math.isfinite(decimal_odds) or decimal_odds <= 1.0:
+            raise ValueError("odds must be finite decimal odds greater than one")
+        return decimal_odds
+
+    def calculate_fraction(
+        self,
+        prob_win: float,
+        odds: float,
+        *,
+        probability_lower_bound: float,
+        evidence_status: str,
+        recent_performance: Optional[dict] = None,
+    ) -> float:
+        """Calculate a non-actionable fraction using conservative evidence.
+
+        The result is an analysis value only. It cannot authorize a wager.
         """
-        self.kelly_fraction = kelly_fraction
-        self.min_edge = min_edge
-        self.min_probability = min_probability
-        self.max_bet_pct = max_bet_pct
-        self.aggressive_mode = aggressive_mode
+
+        if recent_performance is not None:
+            raise ValueError(
+                "recent-performance or hot-streak multipliers are prohibited"
+            )
+        point_probability = self._validate_probability(prob_win, "prob_win")
+        lower_probability = self._validate_probability(
+            probability_lower_bound, "probability_lower_bound"
+        )
+        if lower_probability > point_probability:
+            raise ValueError("probability_lower_bound cannot exceed prob_win")
+        decimal_odds = self._validate_decimal_odds(odds)
+        if evidence_status not in QUALIFIED_ANALYSIS_STATUSES:
+            return 0.0
+        if lower_probability < self.min_probability:
+            return 0.0
+
+        implied_probability = 1.0 / decimal_odds
+        edge = lower_probability - implied_probability
+        if edge < self.min_edge:
+            return 0.0
+
+        net_odds = decimal_odds - 1.0
+        full_kelly = (
+            lower_probability * net_odds - (1.0 - lower_probability)
+        ) / net_odds
+        fraction = max(0.0, full_kelly * self.kelly_fraction)
+        return min(fraction, self.max_bet_pct)
 
     def calculate_bet_size(
         self,
         prob_win: float,
         odds: float,
         bankroll: float,
-        recent_performance: dict = None,
+        recent_performance: Optional[dict] = None,
+        *,
+        probability_lower_bound: Optional[float] = None,
+        evidence_status: str = "unverified",
+        live_wager_authorized: bool = False,
     ) -> float:
+        """Calculate dollars only under explicit live authority and evidence.
+
+        Paper/research mode raises instead of returning a number that downstream
+        code could silently reinterpret as permission to wager.
         """
-        Calculate optimal bet size with aggressive sizing for favorites.
 
-        Args:
-            prob_win: Model probability of winning (0-1)
-            odds: Decimal odds (e.g., 1.91)
-            bankroll: Current bankroll
-            recent_performance: Dict with 'win_rate_last_10' for hot streak detection
+        if self.deployment_mode != "live":
+            raise BetSizingBlockedError(
+                "dollar bet sizing is disabled while deployment_mode is not live"
+            )
+        if not live_wager_authorized:
+            raise BetSizingBlockedError("live wager authorization is missing")
+        if evidence_status != "live_validated":
+            raise BetSizingBlockedError(
+                "live sizing requires evidence_status='live_validated'"
+            )
+        if probability_lower_bound is None:
+            raise BetSizingBlockedError(
+                "live sizing requires a validated probability lower bound"
+            )
+        if isinstance(bankroll, bool) or not isinstance(bankroll, (int, float)):
+            raise ValueError("bankroll must be numeric")
+        bankroll_value = float(bankroll)
+        if not math.isfinite(bankroll_value) or bankroll_value <= 0.0:
+            raise ValueError("bankroll must be finite and greater than zero")
 
-        Returns:
-            Bet size in dollars (0 if no edge)
-        """
-        # Check minimum probability
-        if prob_win < self.min_probability:
-            return 0.0
-
-        # Calculate edge
-        implied_prob = 1 / odds
-        edge = prob_win - implied_prob
-
-        # Check minimum edge
-        if edge < self.min_edge:
-            return 0.0
-
-        # Kelly formula
-        b = odds - 1  # Net odds
-        kelly_full = (prob_win * b - (1 - prob_win)) / b
-
-        # Apply fractional Kelly
-        kelly_bet = kelly_full * self.kelly_fraction
-
-        # AGGRESSIVE SIZING FOR FAVORITES (our proven strength!)
-        if self.aggressive_mode:
-            multiplier = 1.0
-
-            # Heavy favorite (1.3-1.7 odds) + high confidence = THROTTLE UP!
-            if 1.3 < odds < 1.7 and prob_win > 0.70:
-                # We win these 79% of the time! ROI: +10.8%
-                multiplier = 2.5  # Very aggressive!
-                logger.debug(
-                    f"Aggressive sizing: Heavy favorite (odds {odds:.2f}, prob {prob_win:.2%})"
-                )
-
-            # Small favorite (1.7-2.0) + confidence = BEST ROI!
-            elif 1.7 < odds < 2.0 and prob_win > 0.65:
-                # We win 67% of the time! ROI: +20.4% (BEST!)
-                multiplier = 1.5  # Aggressive!
-                logger.debug(
-                    f"Aggressive sizing: Small favorite (odds {odds:.2f}, prob {prob_win:.2%})"
-                )
-
-            # Hot streak bonus
-            if (
-                recent_performance
-                and recent_performance.get("win_rate_last_10", 0) > 0.75
-            ):
-                multiplier *= 1.2  # 20% bonus on hot streak
-                logger.debug(
-                    f"Hot streak bonus: {recent_performance['win_rate_last_10']:.1%} win rate"
-                )
-
-            kelly_bet *= multiplier
-
-        # Cap at maximum (10% for aggressive, 2% for conservative)
-        max_pct = 0.10 if self.aggressive_mode else self.max_bet_pct
-        kelly_bet = min(kelly_bet, max_pct)
-
-        # Ensure non-negative
-        kelly_bet = max(kelly_bet, 0.0)
-
-        # Convert to dollars
-        bet_size = bankroll * kelly_bet
-
-        return bet_size
+        fraction = self.calculate_fraction(
+            prob_win,
+            odds,
+            probability_lower_bound=probability_lower_bound,
+            evidence_status=evidence_status,
+            recent_performance=recent_performance,
+        )
+        return bankroll_value * fraction

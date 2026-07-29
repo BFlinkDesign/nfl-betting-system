@@ -1,502 +1,540 @@
-"""
-Smart Parlay Generator
+"""Fail-closed, paper-only parlay evidence evaluator.
 
-Generates intelligent parlay combinations from individual bet recommendations.
+The legacy generator multiplied marginal win probabilities, synthesized missing
+prices, mixed best-leg prices from different books, and labeled the result a
+recommendation. This replacement requires:
 
-Rules:
-1. Only use Tier S bets (highest confidence)
-2. Check for correlation (no same game, no division rivals on same day)
-3. Max 3 legs per parlay
-4. Combined probability must be > 45%
-5. Expected value must be positive
-6. Sort by expected ROI
+* one actual, fresh, same-book parlay offer;
+* immutable market and model evidence hashes;
+* qualified lower-bound probability evidence for every leg;
+* one explicit validated joint-probability estimate for the exact leg set; and
+* positive expected value at the probability lower bound.
 
-Usage:
-    python scripts/parlay_generator.py --input reports/pregame_analysis.json
-    python scripts/parlay_generator.py --input reports/pregame_analysis.json --output reports/parlays.json
+The output may contain PAPER_TRACK candidates. It never authorizes, sizes, or
+places a live wager.
 """
 
-import sys
-from pathlib import Path
+from __future__ import annotations
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
+import argparse
 import json
 import logging
+import math
+import sys
+from datetime import datetime, timezone
 from itertools import combinations
-from typing import Dict, List
+from pathlib import Path
+from typing import Any, Iterable, Mapping, Optional
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.betting.decision_contracts import (  # noqa: E402
+    CONTRACT_VERSION,
+    PAPER_AUTHORITY,
+    DecisionContractError,
+    DecisionStatus,
+    MarketSnapshot,
+    ModelEstimate,
+    evaluate_for_paper_tracking,
+    parse_utc_datetime,
+)
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
-
-class ParlayCalculator:
-    """Calculates parlay odds and probabilities."""
-
-    @staticmethod
-    def american_to_decimal(american_odds: float) -> float:
-        """Convert American odds to decimal."""
-        if american_odds > 0:
-            return (american_odds / 100) + 1
-        else:
-            return (100 / abs(american_odds)) + 1
-
-    @staticmethod
-    def decimal_to_american(decimal_odds: float) -> float:
-        """Convert decimal odds to American."""
-        if decimal_odds >= 2.0:
-            return (decimal_odds - 1) * 100
-        else:
-            return -100 / (decimal_odds - 1)
-
-    @staticmethod
-    def calculate_parlay_odds(individual_odds: List[float]) -> float:
-        """
-        Calculate parlay odds from individual American odds.
-
-        Args:
-            individual_odds: List of American odds for each leg
-
-        Returns:
-            Combined American odds for parlay
-
-        Example:
-            calculate_parlay_odds([-110, -110, +150])
-            # Returns: +502  (parlay pays 5.02x if all win)
-        """
-        # Convert all to decimal
-        decimal_odds = [
-            ParlayCalculator.american_to_decimal(o) for o in individual_odds
-        ]
-
-        # Multiply for parlay
-        parlay_decimal = 1.0
-        for odds in decimal_odds:
-            parlay_decimal *= odds
-
-        # Convert back to American
-        parlay_american = ParlayCalculator.decimal_to_american(parlay_decimal)
-
-        return parlay_american
-
-    @staticmethod
-    def calculate_combined_probability(individual_probs: List[float]) -> float:
-        """
-        Calculate combined win probability for parlay.
-
-        Args:
-            individual_probs: List of win probabilities (0-1) for each leg
-
-        Returns:
-            Combined probability (0-1)
-
-        Example:
-            calculate_combined_probability([0.65, 0.70, 0.60])
-            # Returns: 0.273  (27.3% chance all three win)
-        """
-        combined = 1.0
-        for prob in individual_probs:
-            combined *= prob
-        return combined
-
-    @staticmethod
-    def calculate_expected_value(win_prob: float, parlay_odds: float) -> float:
-        """
-        Calculate expected value of parlay.
-
-        Args:
-            win_prob: Combined win probability (0-1)
-            parlay_odds: Parlay payout odds (American format)
-
-        Returns:
-            Expected value as decimal (e.g., 0.15 = +15% EV)
-        """
-        decimal_odds = ParlayCalculator.american_to_decimal(parlay_odds)
-
-        # EV = (win_prob × payout) - (lose_prob × stake)
-        # With $1 stake: EV = (win_prob × decimal_odds) - 1
-        ev = (win_prob * decimal_odds) - 1
-
-        return ev
+DEFAULT_MAX_COMBINATIONS = 1000
+DEFAULT_MAX_RESULTS_PER_SIZE = 20
 
 
-class CorrelationChecker:
-    """Checks if bets are correlated (should not be parlayed)."""
+def _first_present(data: Mapping[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in data and data[key] is not None:
+            return data[key]
+    return None
 
-    @staticmethod
-    def is_same_game(bet1: Dict, bet2: Dict) -> bool:
-        """Check if two bets are from the same game."""
-        return bet1["game_info"]["game_id"] == bet2["game_info"]["game_id"]
 
-    @staticmethod
-    def is_division_rivals_same_day(bet1: Dict, bet2: Dict) -> bool:
-        """
-        Check if bets involve division rivals playing on the same day.
+def _text(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ""
 
-        Examples of correlation:
-        - KC vs DEN + LV vs LAC (both AFC West games on same day)
-        - DAL vs PHI + NYG vs WAS (both NFC East games on same day)
-        """
-        # Get team info
-        bet1_teams = {bet1["game_info"]["home_team"], bet1["game_info"]["away_team"]}
-        bet2_teams = {bet2["game_info"]["home_team"], bet2["game_info"]["away_team"]}
 
-        # Same day?
-        bet1_date = bet1["game_info"].get("game_date", "")
-        bet2_date = bet2["game_info"].get("game_date", "")
+def _leg_id(recommendation: Mapping[str, Any], game_info: Mapping[str, Any]) -> str:
+    explicit = _text(
+        _first_present(recommendation, "selection_id", "leg_id", "candidate_id")
+    )
+    if explicit:
+        return explicit
+    event_id = _text(_first_present(recommendation, "event_id")) or _text(
+        _first_present(game_info, "game_id", "event_id")
+    )
+    market_key = _text(_first_present(recommendation, "market_key", "bet_type"))
+    selection_key = _text(
+        _first_present(recommendation, "selection_key", "team", "side")
+    )
+    if event_id and market_key and selection_key:
+        return f"{event_id}:{market_key}:{selection_key}"
+    raise DecisionContractError(
+        "leg requires selection_id or event_id + market_key + selection_key"
+    )
 
-        if bet1_date != bet2_date:
-            return False
 
-        # Division mapping (NFL divisions)
-        divisions = {
-            "AFC East": [
-                "Buffalo Bills",
-                "Miami Dolphins",
-                "New England Patriots",
-                "New York Jets",
-            ],
-            "AFC North": [
-                "Baltimore Ravens",
-                "Cincinnati Bengals",
-                "Cleveland Browns",
-                "Pittsburgh Steelers",
-            ],
-            "AFC South": [
-                "Houston Texans",
-                "Indianapolis Colts",
-                "Jacksonville Jaguars",
-                "Tennessee Titans",
-            ],
-            "AFC West": [
-                "Denver Broncos",
-                "Kansas City Chiefs",
-                "Las Vegas Raiders",
-                "Los Angeles Chargers",
-            ],
-            "NFC East": [
-                "Dallas Cowboys",
-                "New York Giants",
-                "Philadelphia Eagles",
-                "Washington Commanders",
-            ],
-            "NFC North": [
-                "Chicago Bears",
-                "Detroit Lions",
-                "Green Bay Packers",
-                "Minnesota Vikings",
-            ],
-            "NFC South": [
-                "Atlanta Falcons",
-                "Carolina Panthers",
-                "New Orleans Saints",
-                "Tampa Bay Buccaneers",
-            ],
-            "NFC West": [
-                "Arizona Cardinals",
-                "Los Angeles Rams",
-                "San Francisco 49ers",
-                "Seattle Seahawks",
-            ],
-        }
+def _game_label(game_info: Mapping[str, Any]) -> str:
+    away = _text(game_info.get("away_team"))
+    home = _text(game_info.get("home_team"))
+    if away and home:
+        return f"{away} @ {home}"
+    return _text(_first_present(game_info, "event_name", "game_id")) or "unknown_event"
 
-        # Find divisions for both games
-        bet1_division = None
-        bet2_division = None
 
-        for div, teams in divisions.items():
-            if any(team in bet1_teams for team in teams):
-                bet1_division = div
-            if any(team in bet2_teams for team in teams):
-                bet2_division = div
+def _normalize_payload(payload: Any) -> tuple[list[Any], list[Any]]:
+    if isinstance(payload, list):
+        return payload, []
+    if not isinstance(payload, Mapping):
+        raise DecisionContractError("input root must be an object or array")
 
-        # If same division and same day, they're correlated
-        return bet1_division == bet2_division and bet1_division is not None
+    analyses = _first_present(payload, "analyses", "games", "recommendation_sets")
+    if analyses is None and "recommendations" in payload:
+        analyses = [payload]
+    if analyses is None:
+        analyses = []
+    joint_estimates = payload.get("joint_estimates", [])
+    if not isinstance(analyses, list):
+        raise DecisionContractError("analyses must be an array")
+    if not isinstance(joint_estimates, list):
+        raise DecisionContractError("joint_estimates must be an array")
+    return analyses, joint_estimates
 
-    @staticmethod
-    def is_correlated(bet1: Dict, bet2: Dict) -> bool:
-        """
-        Check if two bets are correlated.
 
-        Returns True if they should NOT be parlayed together.
-        """
-        # Same game = definitely correlated
-        if CorrelationChecker.is_same_game(bet1, bet2):
-            return True
+def _flatten_recommendations(analyses: Iterable[Any]) -> list[dict[str, Any]]:
+    flattened: list[dict[str, Any]] = []
+    for analysis_index, analysis in enumerate(analyses):
+        if not isinstance(analysis, Mapping):
+            flattened.append(
+                {
+                    "_invalid_analysis": f"analysis_{analysis_index + 1} must be an object"
+                }
+            )
+            continue
+        game_info = analysis.get("game_info", {})
+        if not isinstance(game_info, Mapping):
+            game_info = {}
+        recommendations = analysis.get("recommendations", [])
+        if not isinstance(recommendations, list):
+            flattened.append(
+                {
+                    "_invalid_analysis": (
+                        f"analysis_{analysis_index + 1}.recommendations must be an array"
+                    )
+                }
+            )
+            continue
+        for recommendation in recommendations:
+            if not isinstance(recommendation, Mapping):
+                flattened.append(
+                    {"_invalid_analysis": "recommendation must be an object"}
+                )
+                continue
+            flattened.append(
+                {
+                    "recommendation": dict(recommendation),
+                    "game_info": dict(game_info),
+                    "analysis_defaults": dict(analysis),
+                }
+            )
+    return flattened
 
-        # Division rivals on same day = likely correlated
-        if CorrelationChecker.is_division_rivals_same_day(bet1, bet2):
-            return True
 
-        # No correlation detected
-        return False
+def _market_mapping(
+    recommendation: Mapping[str, Any],
+    game_info: Mapping[str, Any],
+    defaults: Mapping[str, Any],
+    leg_id: str,
+) -> Mapping[str, Any]:
+    nested = recommendation.get("market_snapshot")
+    if isinstance(nested, Mapping):
+        return nested
+
+    event_id = _first_present(recommendation, "event_id") or _first_present(
+        game_info, "game_id", "event_id"
+    )
+    return {
+        "snapshot_id": _first_present(recommendation, "snapshot_id"),
+        "event_id": event_id,
+        "market_key": _first_present(recommendation, "market_key", "bet_type"),
+        "selection_key": _first_present(
+            recommendation, "selection_key", "team", "side"
+        ),
+        "sportsbook": recommendation.get("sportsbook"),
+        "source": _first_present(recommendation, "odds_source", "source")
+        or _first_present(defaults, "odds_source"),
+        "american_odds": recommendation.get("odds"),
+        "observed_at": _first_present(recommendation, "odds_observed_at", "observed_at")
+        or _first_present(defaults, "odds_observed_at"),
+        "event_start_at": _first_present(
+            recommendation, "event_start_at", "commence_time"
+        )
+        or _first_present(game_info, "event_start_at", "commence_time"),
+        "source_hash": _first_present(
+            recommendation, "odds_source_hash", "source_hash"
+        ),
+        "_leg_id": leg_id,
+    }
+
+
+def _estimate_mapping(
+    recommendation: Mapping[str, Any], defaults: Mapping[str, Any]
+) -> Mapping[str, Any]:
+    nested = recommendation.get("model_estimate")
+    if isinstance(nested, Mapping):
+        return nested
+    return {
+        "estimate_id": recommendation.get("estimate_id"),
+        "model_id": recommendation.get("model_id"),
+        "evaluation_id": recommendation.get("evaluation_id"),
+        "point_probability": _first_present(
+            recommendation, "point_probability", "win_probability"
+        ),
+        "lower_probability_bound": _first_present(
+            recommendation,
+            "lower_probability_bound",
+            "probability_lower_bound",
+        ),
+        "evidence_status": recommendation.get("evidence_status"),
+        "generated_at": _first_present(
+            recommendation, "estimate_generated_at", "generated_at"
+        )
+        or _first_present(defaults, "estimate_generated_at"),
+        "data_cutoff_at": _first_present(
+            recommendation, "data_cutoff_at", "feature_cutoff_at"
+        ),
+        "artifact_hash": _first_present(
+            recommendation, "estimate_artifact_hash", "artifact_hash"
+        ),
+    }
+
+
+def _diagnostic_product(values: Iterable[float]) -> float:
+    product = 1.0
+    for value in values:
+        product *= value
+    return product
 
 
 class ParlayGenerator:
-    """Generates smart parlay combinations."""
+    """Evaluate exact, pre-registered parlay evidence for paper tracking."""
 
-    def __init__(self):
-        self.calculator = ParlayCalculator()
-        self.correlation_checker = CorrelationChecker()
+    def __init__(
+        self,
+        *,
+        now: Optional[datetime] = None,
+        max_age_seconds: int = 300,
+        min_expected_value_lower_bound: float = 0.0,
+        max_combinations: int = DEFAULT_MAX_COMBINATIONS,
+        max_results_per_size: int = DEFAULT_MAX_RESULTS_PER_SIZE,
+    ) -> None:
+        self.now = parse_utc_datetime(now or datetime.now(timezone.utc), "now")
+        if max_age_seconds <= 0:
+            raise DecisionContractError("max_age_seconds must be positive")
+        if max_combinations <= 0:
+            raise DecisionContractError("max_combinations must be positive")
+        if max_results_per_size <= 0:
+            raise DecisionContractError("max_results_per_size must be positive")
+        self.max_age_seconds = max_age_seconds
+        self.min_expected_value_lower_bound = min_expected_value_lower_bound
+        self.max_combinations = max_combinations
+        self.max_results_per_size = max_results_per_size
 
-    def load_recommendations(self, input_file: str) -> List[Dict]:
-        """
-        Load bet recommendations from pre-game analysis.
-
-        Args:
-            input_file: Path to pregame_analysis.json
-
-        Returns:
-            List of bet recommendation dictionaries
-        """
-        with open(input_file, "r") as f:
-            analyses = json.load(f)
-
-        # Extract all recommendations
-        all_recs = []
-        for analysis in analyses:
-            for rec in analysis["recommendations"]:
-                # Add game info to recommendation
-                rec["game_info"] = analysis["game_info"]
-                all_recs.append(rec)
-
-        logger.info(f"Loaded {len(all_recs)} bet recommendations")
-        return all_recs
-
-    def filter_tier_s_bets(self, recommendations: List[Dict]) -> List[Dict]:
-        """
-        Filter for Tier S bets only (highest confidence).
-
-        Args:
-            recommendations: List of all recommendations
-
-        Returns:
-            List of Tier S recommendations only
-        """
-        tier_s = [r for r in recommendations if r.get("confidence_tier") == "S"]
-        logger.info(f"Filtered to {len(tier_s)} Tier S bets")
-        return tier_s
-
-    def generate_2_leg_parlays(self, bets: List[Dict]) -> List[Dict]:
-        """Generate all valid 2-leg parlay combinations."""
-        parlays = []
-
-        for bet1, bet2 in combinations(bets, 2):
-            # Check correlation
-            if self.correlation_checker.is_correlated(bet1, bet2):
-                continue
-
-            # Calculate parlay
-            parlay = self._create_parlay([bet1, bet2])
-
-            # Only add if positive EV and >45% probability
-            if parlay["expected_value"] > 0 and parlay["combined_probability"] > 0.45:
-                parlays.append(parlay)
-
-        logger.info(f"Generated {len(parlays)} valid 2-leg parlays")
-        return parlays
-
-    def generate_3_leg_parlays(self, bets: List[Dict]) -> List[Dict]:
-        """Generate all valid 3-leg parlay combinations."""
-        parlays = []
-
-        for bet1, bet2, bet3 in combinations(bets, 3):
-            # Check correlation (pairwise)
-            if (
-                self.correlation_checker.is_correlated(bet1, bet2)
-                or self.correlation_checker.is_correlated(bet1, bet3)
-                or self.correlation_checker.is_correlated(bet2, bet3)
-            ):
-                continue
-
-            # Calculate parlay
-            parlay = self._create_parlay([bet1, bet2, bet3])
-
-            # Only add if positive EV and >40% probability (slightly lower for 3-leg)
-            if parlay["expected_value"] > 0 and parlay["combined_probability"] > 0.40:
-                parlays.append(parlay)
-
-        logger.info(f"Generated {len(parlays)} valid 3-leg parlays")
-        return parlays
-
-    def _create_parlay(self, legs: List[Dict]) -> Dict:
-        """Create parlay object from legs."""
-        # Extract odds and probabilities
-        individual_odds = []
-        individual_probs = []
-
-        for leg in legs:
-            # Handle missing odds
-            if leg["odds"] is None:
-                # Use implied odds from probability
-                prob = leg["win_probability"]
-                decimal_odds = 1 / prob
-                american_odds = self.calculator.decimal_to_american(decimal_odds)
-                individual_odds.append(american_odds)
-            else:
-                individual_odds.append(leg["odds"])
-
-            individual_probs.append(leg["win_probability"])
-
-        # Calculate parlay odds
-        parlay_odds = self.calculator.calculate_parlay_odds(individual_odds)
-
-        # Calculate combined probability
-        combined_prob = self.calculator.calculate_combined_probability(individual_probs)
-
-        # Calculate expected value
-        ev = self.calculator.calculate_expected_value(combined_prob, parlay_odds)
-
-        # Build parlay object
-        parlay = {
-            "legs": [
-                {
-                    "team": leg["team"],
-                    "bet_type": leg["bet_type"],
-                    "odds": leg["odds"],
-                    "win_probability": leg["win_probability"],
-                    "edge_name": leg["edge_name"],
-                    "game": f"{leg['game_info']['away_team']} @ {leg['game_info']['home_team']}",
-                }
-                for leg in legs
-            ],
-            "num_legs": len(legs),
-            "parlay_odds": parlay_odds,
-            "combined_probability": combined_prob,
-            "expected_value": ev,
-            "expected_roi": ev,
-            "recommended_stake_pct": min(
-                combined_prob * 0.5, 0.02
-            ),  # Max 2% of bankroll
-        }
-
-        return parlay
-
-    def generate_all_parlays(self, recommendations: List[Dict]) -> Dict:
-        """
-        Generate all valid parlay combinations.
-
-        Returns:
-            Dictionary with 2-leg and 3-leg parlays
-        """
-        # Filter for Tier S bets
-        tier_s_bets = self.filter_tier_s_bets(recommendations)
-
-        if len(tier_s_bets) < 2:
-            logger.warning("Not enough Tier S bets for parlays (need at least 2)")
-            return {"2_leg": [], "3_leg": []}
-
-        # Generate 2-leg parlays
-        two_leg = self.generate_2_leg_parlays(tier_s_bets)
-
-        # Generate 3-leg parlays (if enough bets)
-        three_leg = []
-        if len(tier_s_bets) >= 3:
-            three_leg = self.generate_3_leg_parlays(tier_s_bets)
-
-        # Sort by expected ROI
-        two_leg = sorted(two_leg, key=lambda x: x["expected_roi"], reverse=True)
-        three_leg = sorted(three_leg, key=lambda x: x["expected_roi"], reverse=True)
-
+    def _normalize_leg(self, raw: Mapping[str, Any]) -> dict[str, Any]:
+        if "_invalid_analysis" in raw:
+            raise DecisionContractError(str(raw["_invalid_analysis"]))
+        recommendation = raw["recommendation"]
+        game_info = raw["game_info"]
+        defaults = raw["analysis_defaults"]
+        leg_id = _leg_id(recommendation, game_info)
+        snapshot = MarketSnapshot.from_mapping(
+            _market_mapping(recommendation, game_info, defaults, leg_id)
+        )
+        estimate = ModelEstimate.from_mapping(
+            _estimate_mapping(recommendation, defaults)
+        )
+        receipt = evaluate_for_paper_tracking(
+            snapshot,
+            estimate,
+            now=self.now,
+            max_age_seconds=self.max_age_seconds,
+            min_expected_value_lower_bound=self.min_expected_value_lower_bound,
+        )
+        if receipt.status is not DecisionStatus.PAPER_TRACK:
+            raise DecisionContractError(
+                "individual leg is not paper-track eligible: "
+                + ", ".join(receipt.blockers)
+            )
         return {
-            "2_leg": two_leg[:5],  # Top 5 only
-            "3_leg": three_leg[:5],  # Top 5 only
+            "leg_id": leg_id,
+            "team": _text(recommendation.get("team")) or snapshot.selection_key,
+            "bet_type": _text(recommendation.get("bet_type")) or snapshot.market_key,
+            "game": _game_label(game_info),
+            "event_id": snapshot.event_id,
+            "sportsbook": snapshot.sportsbook,
+            "market_snapshot": snapshot,
+            "model_estimate": estimate,
+            "individual_receipt": receipt,
         }
 
+    @staticmethod
+    def _joint_index(
+        joint_estimates: Iterable[Any],
+    ) -> dict[frozenset[str], Mapping[str, Any]]:
+        indexed: dict[frozenset[str], Mapping[str, Any]] = {}
+        for record in joint_estimates:
+            if not isinstance(record, Mapping):
+                continue
+            leg_ids = record.get("leg_ids")
+            if not isinstance(leg_ids, list) or len(leg_ids) < 2:
+                continue
+            normalized = frozenset(str(leg_id) for leg_id in leg_ids)
+            if len(normalized) != len(leg_ids):
+                continue
+            if normalized in indexed:
+                raise DecisionContractError(
+                    "duplicate joint estimate for leg set: "
+                    + ", ".join(sorted(normalized))
+                )
+            indexed[normalized] = record
+        return indexed
 
-def main():
-    """Main execution."""
-    import argparse
+    def _evaluate_combination(
+        self,
+        legs: tuple[dict[str, Any], ...],
+        joint_record: Optional[Mapping[str, Any]],
+    ) -> tuple[Optional[dict[str, Any]], Optional[dict[str, Any]]]:
+        leg_ids = [leg["leg_id"] for leg in legs]
+        diagnostic = {
+            "point_marginal_product": _diagnostic_product(
+                leg["model_estimate"].point_probability for leg in legs
+            ),
+            "lower_bound_marginal_product": _diagnostic_product(
+                leg["model_estimate"].lower_probability_bound for leg in legs
+            ),
+            "warning": (
+                "marginal products are diagnostics only and are never used as "
+                "the joint probability"
+            ),
+        }
+        blocked_base = {
+            "leg_ids": leg_ids,
+            "num_legs": len(legs),
+            "games": [leg["game"] for leg in legs],
+            "diagnostic": diagnostic,
+        }
 
-    parser = argparse.ArgumentParser(description="Smart Parlay Generator")
-    parser.add_argument(
-        "--input", required=True, help="Input file (pregame_analysis.json)"
+        sportsbooks = {leg["sportsbook"] for leg in legs}
+        if len(sportsbooks) != 1:
+            return None, {
+                **blocked_base,
+                "blockers": ["legs_do_not_share_one_placeable_sportsbook"],
+            }
+        if joint_record is None:
+            return None, {
+                **blocked_base,
+                "blockers": [
+                    "missing_pre_registered_joint_probability_and_exact_parlay_offer"
+                ],
+            }
+
+        market_data = joint_record.get("market_snapshot", joint_record)
+        estimate_data = joint_record.get("model_estimate", joint_record)
+        try:
+            snapshot = MarketSnapshot.from_mapping(market_data)
+            estimate = ModelEstimate.from_mapping(estimate_data)
+            only_book = next(iter(sportsbooks))
+            blockers: list[str] = []
+            if snapshot.sportsbook != only_book:
+                blockers.append("parlay_offer_book_does_not_match_leg_book")
+            declared_leg_ids = joint_record.get("leg_ids", [])
+            if set(str(value) for value in declared_leg_ids) != set(leg_ids):
+                blockers.append("joint_estimate_leg_set_mismatch")
+            if estimate.estimate_id in {
+                leg["model_estimate"].estimate_id for leg in legs
+            }:
+                blockers.append("joint_estimate_must_be_distinct_from_leg_estimates")
+            if blockers:
+                return None, {**blocked_base, "blockers": sorted(set(blockers))}
+
+            receipt = evaluate_for_paper_tracking(
+                snapshot,
+                estimate,
+                now=self.now,
+                max_age_seconds=self.max_age_seconds,
+                min_expected_value_lower_bound=self.min_expected_value_lower_bound,
+            )
+            candidate = {
+                "decision": receipt.to_dict(),
+                "num_legs": len(legs),
+                "legs": [
+                    {
+                        "leg_id": leg["leg_id"],
+                        "team": leg["team"],
+                        "bet_type": leg["bet_type"],
+                        "game": leg["game"],
+                        "sportsbook": leg["sportsbook"],
+                        "individual_decision_id": leg["individual_receipt"].decision_id,
+                    }
+                    for leg in legs
+                ],
+                "sportsbook": snapshot.sportsbook,
+                "offered_american_odds": snapshot.american_odds,
+                "joint_probability_point": estimate.point_probability,
+                "joint_probability_lower_bound": estimate.lower_probability_bound,
+                "diagnostic": diagnostic,
+            }
+            if receipt.status is DecisionStatus.PAPER_TRACK:
+                return candidate, None
+            return None, {
+                **blocked_base,
+                "blockers": list(receipt.blockers),
+                "decision": receipt.to_dict(),
+            }
+        except (DecisionContractError, KeyError, TypeError) as exc:
+            return None, {
+                **blocked_base,
+                "blockers": [f"joint_contract_error:{exc}"],
+            }
+
+    def generate_all_parlays(self, payload: Any) -> dict[str, Any]:
+        analyses, joint_estimates = _normalize_payload(payload)
+        raw_recommendations = _flatten_recommendations(analyses)
+        valid_legs: list[dict[str, Any]] = []
+        invalid_legs: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+
+        for index, raw in enumerate(raw_recommendations):
+            try:
+                leg = self._normalize_leg(raw)
+                if leg["leg_id"] in seen_ids:
+                    raise DecisionContractError(f"duplicate leg_id: {leg['leg_id']}")
+                seen_ids.add(leg["leg_id"])
+                valid_legs.append(leg)
+            except (DecisionContractError, KeyError, TypeError) as exc:
+                invalid_legs.append(
+                    {
+                        "input_index": index,
+                        "status": "NO_BET",
+                        "blockers": [f"leg_contract_error:{exc}"],
+                    }
+                )
+
+        joint_index = self._joint_index(joint_estimates)
+        results: dict[str, list[dict[str, Any]]] = {"2_leg": [], "3_leg": []}
+        blocked_candidates: list[dict[str, Any]] = []
+        possible_combinations = sum(
+            math.comb(len(valid_legs), size)
+            for size in (2, 3)
+            if len(valid_legs) >= size
+        )
+        if possible_combinations > self.max_combinations:
+            return {
+                "contract_version": CONTRACT_VERSION,
+                "authority": PAPER_AUTHORITY,
+                "2_leg": [],
+                "3_leg": [],
+                "invalid_legs": invalid_legs,
+                "blocked_candidates": [
+                    {
+                        "blockers": [
+                            "candidate_space_exceeds_bound; pre-register a smaller set"
+                        ],
+                        "possible_combinations": possible_combinations,
+                        "max_combinations": self.max_combinations,
+                    }
+                ],
+                "summary": {
+                    "input_recommendations": len(raw_recommendations),
+                    "valid_individual_legs": len(valid_legs),
+                    "invalid_individual_legs": len(invalid_legs),
+                    "paper_track_parlays": 0,
+                    "live_wagers_authorized": False,
+                },
+            }
+
+        for size, output_key in ((2, "2_leg"), (3, "3_leg")):
+            if len(valid_legs) < size:
+                continue
+            for legs in combinations(valid_legs, size):
+                key = frozenset(leg["leg_id"] for leg in legs)
+                candidate, blocked = self._evaluate_combination(
+                    legs, joint_index.get(key)
+                )
+                if candidate is not None:
+                    results[output_key].append(candidate)
+                if blocked is not None:
+                    blocked_candidates.append(blocked)
+
+            results[output_key].sort(
+                key=lambda item: item["decision"]["expected_value_lower_bound"],
+                reverse=True,
+            )
+            results[output_key] = results[output_key][: self.max_results_per_size]
+
+        paper_count = len(results["2_leg"]) + len(results["3_leg"])
+        return {
+            "contract_version": CONTRACT_VERSION,
+            "generated_at": self.now.isoformat(),
+            "authority": PAPER_AUTHORITY,
+            "2_leg": results["2_leg"],
+            "3_leg": results["3_leg"],
+            "invalid_legs": invalid_legs,
+            "blocked_candidates": blocked_candidates,
+            "summary": {
+                "input_recommendations": len(raw_recommendations),
+                "valid_individual_legs": len(valid_legs),
+                "invalid_individual_legs": len(invalid_legs),
+                "evaluated_combinations": possible_combinations,
+                "blocked_combinations": len(blocked_candidates),
+                "paper_track_parlays": paper_count,
+                "live_wagers_authorized": False,
+            },
+        }
+
+    def load_and_generate(self, input_file: str | Path) -> dict[str, Any]:
+        with open(input_file, "r", encoding="utf-8") as handle:
+            return self.generate_all_parlays(json.load(handle))
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Evaluate parlay evidence for paper tracking only"
     )
+    parser.add_argument("--input", required=True, help="Input JSON")
     parser.add_argument(
-        "--output", default="reports/parlays.json", help="Output file path"
+        "--output", default="reports/parlays.json", help="Output JSON file"
     )
-
+    parser.add_argument("--now", help="Optional ISO-8601 evaluation time")
+    parser.add_argument("--max-age-seconds", type=int, default=300)
+    parser.add_argument("--min-ev-lower-bound", type=float, default=0.0)
+    parser.add_argument(
+        "--max-combinations", type=int, default=DEFAULT_MAX_COMBINATIONS
+    )
     args = parser.parse_args()
 
-    # Initialize generator
-    generator = ParlayGenerator()
+    now = parse_utc_datetime(args.now, "now") if args.now else None
+    generator = ParlayGenerator(
+        now=now,
+        max_age_seconds=args.max_age_seconds,
+        min_expected_value_lower_bound=args.min_ev_lower_bound,
+        max_combinations=args.max_combinations,
+    )
+    result = generator.load_and_generate(args.input)
 
-    # Load recommendations
-    recommendations = generator.load_recommendations(args.input)
-
-    if not recommendations:
-        logger.warning("No recommendations found in input file")
-        # Create empty output
-        parlays = {"2_leg": [], "3_leg": []}
-    else:
-        # Generate parlays
-        parlays = generator.generate_all_parlays(recommendations)
-
-    # Print results
-    print(f"\n{'='*80}")
-    print("PARLAY RECOMMENDATIONS")
-    print(f"{'='*80}\n")
-
-    # 2-leg parlays
-    if parlays["2_leg"]:
-        print(f"2-LEG PARLAYS ({len(parlays['2_leg'])} recommended):\n")
-        for i, parlay in enumerate(parlays["2_leg"], 1):
-            print(f"Parlay #{i}:")
-            for j, leg in enumerate(parlay["legs"], 1):
-                odds_str = f"{leg['odds']:+.0f}" if leg["odds"] else "N/A"
-                print(f"  Leg {j}: {leg['team']} {leg['bet_type']} ({odds_str})")
-                print(f"         {leg['game']}")
-                print(
-                    f"         Win Prob: {leg['win_probability']:.1%}, Edge: {leg['edge_name']}"
-                )
-            print(f"  Combined Odds: {parlay['parlay_odds']:+.0f}")
-            print(f"  Combined Probability: {parlay['combined_probability']:.1%}")
-            print(f"  Expected Value: {parlay['expected_value']:+.2%}")
-            print(
-                f"  Recommended Stake: {parlay['recommended_stake_pct']:.1%} of bankroll"
-            )
-            print()
-    else:
-        print("No 2-leg parlays recommended\n")
-
-    # 3-leg parlays
-    if parlays["3_leg"]:
-        print(f"3-LEG PARLAYS ({len(parlays['3_leg'])} recommended):\n")
-        for i, parlay in enumerate(parlays["3_leg"], 1):
-            print(f"Parlay #{i}:")
-            for j, leg in enumerate(parlay["legs"], 1):
-                odds_str = f"{leg['odds']:+.0f}" if leg["odds"] else "N/A"
-                print(f"  Leg {j}: {leg['team']} {leg['bet_type']} ({odds_str})")
-                print(f"         {leg['game']}")
-                print(
-                    f"         Win Prob: {leg['win_probability']:.1%}, Edge: {leg['edge_name']}"
-                )
-            print(f"  Combined Odds: {parlay['parlay_odds']:+.0f}")
-            print(f"  Combined Probability: {parlay['combined_probability']:.1%}")
-            print(f"  Expected Value: {parlay['expected_value']:+.2%}")
-            print(
-                f"  Recommended Stake: {parlay['recommended_stake_pct']:.1%} of bankroll"
-            )
-            print()
-    else:
-        print("No 3-leg parlays recommended\n")
-
-    # Save to file
-    output_dir = Path(args.output).parent
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    with open(args.output, "w") as f:
-        json.dump(parlays, f, indent=2, default=str)
-
-    logger.info(f"\n{'='*80}")
-    logger.info("[SUCCESS] PARLAY GENERATION COMPLETE")
-    logger.info(f"{'='*80}")
-    logger.info(f"Results saved to: {args.output}")
-    logger.info(f"2-leg parlays: {len(parlays['2_leg'])}")
-    logger.info(f"3-leg parlays: {len(parlays['3_leg'])}")
-    logger.info(f"{'='*80}")
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(result, indent=2, sort_keys=True), encoding="utf-8"
+    )
+    logger.info("Parlay evidence evaluation written to %s", output_path)
+    print(json.dumps(result["summary"], indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":

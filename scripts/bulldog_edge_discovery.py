@@ -1,622 +1,529 @@
+"""Research-only NFL hypothesis screening.
+
+This module screens a bounded hypothesis set for statistical associations.  It
+never writes candidates into the strategy registry and never calls an
+association a profitable betting edge.  Promotion requires a separate,
+independent temporal holdout with actual market lines/prices and an executable
+strategy definition.
 """
-BULLDOG MODE: EDGE DISCOVERY SYSTEM
 
-This script RELENTLESSLY searches for betting edges in NFL data.
-Tests HUNDREDS of hypotheses. Doesn't stop until edges are found.
-
-NO COMPROMISES. NO EXCUSES. FIND THE EDGE.
-"""
-
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
+from __future__ import annotations
 
 import logging
-import warnings
+import sys
+from pathlib import Path
+from typing import Any, Optional
 
 import pandas as pd
 from scipy import stats
 
-# Import strategy registry
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-from strategy_registry import Strategy, StrategyRegistry, StrategyStatus
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
-warnings.filterwarnings("ignore")
+from src.discovery_validation import (  # noqa: E402
+    benjamini_hochberg,
+    wilson_lower_bound,
+)
+from src.strategy_registry import StrategyRegistry  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
+DEFAULT_DATA_PATH = (
+    PROJECT_ROOT / "data" / "processed" / "features_2016_2024_improved.parquet"
+)
+DEFAULT_REPORT_DIR = PROJECT_ROOT / "reports"
+
 
 class BulldogEdgeDiscovery:
-    """Relentlessly search for betting edges."""
+    """Screen historical hypotheses without changing deployable state."""
 
-    def __init__(self):
-        self.data = None
-        self.edges_found = []
+    def __init__(
+        self,
+        data_path: str | Path | None = None,
+        registry_path: str | Path | None = None,
+        report_dir: str | Path | None = None,
+    ):
+        self.data_path = Path(data_path) if data_path else DEFAULT_DATA_PATH
+        self.report_dir = Path(report_dir) if report_dir else DEFAULT_REPORT_DIR
+        self.data: Optional[pd.DataFrame] = None
         self.tests_run = 0
+        self.hypotheses: list[dict[str, Any]] = []
+        self.research_candidates: list[dict[str, Any]] = []
+        # Backward-compatible safety boundary: validated/deployable edges remain empty.
+        self.edges_found: list[dict[str, Any]] = []
+        self.analysis_window = "all_available_seasons"
+        self._finalized = False
+        self.registry = StrategyRegistry(registry_path, read_only=True)
 
-        # Initialize strategy registry
-        self.registry = StrategyRegistry()
-        self.new_strategies_count = 0
-        self.duplicate_strategies_count = 0
+    def load_data(self) -> bool:
+        """Load historical outcomes and derive research-only targets."""
 
-    def load_data(self):
-        """Load all available data."""
-        logger.info("Loading data...")
-
+        logger.info("Loading research data from %s", self.data_path)
         try:
-            self.data = pd.read_parquet(
-                "data/processed/features_2016_2024_improved.parquet"
-            )
+            data = pd.read_parquet(self.data_path)
+            required = {"home_score", "away_score", "season"}
+            missing = sorted(required - set(data.columns))
+            if missing:
+                raise ValueError(f"missing required columns: {', '.join(missing)}")
 
-            # Filter to games with outcomes
-            self.data = self.data[
-                (self.data["home_score"].notna()) & (self.data["away_score"].notna())
-            ].copy()
+            data = data[data["home_score"].notna() & data["away_score"].notna()].copy()
+            if data.empty:
+                raise ValueError("no completed games are available")
 
-            # Add derived columns
-            self.data["home_win"] = (
-                self.data["home_score"] > self.data["away_score"]
-            ).astype(int)
-            self.data["point_diff"] = self.data["home_score"] - self.data["away_score"]
-            self.data["total_points"] = (
-                self.data["home_score"] + self.data["away_score"]
-            )
-            self.data["home_margin"] = self.data["home_score"] - self.data["away_score"]
-
-            logger.info(f"Loaded {len(self.data)} games with outcomes")
+            data["home_win"] = (data["home_score"] > data["away_score"]).astype(int)
+            data["point_diff"] = data["home_score"] - data["away_score"]
+            data["total_points"] = data["home_score"] + data["away_score"]
+            data["home_margin"] = data["point_diff"]
+            self.data = data
             logger.info(
-                f"Date range: {self.data['season'].min()} to {self.data['season'].max()}"
+                "Loaded %s completed games (%s-%s)",
+                len(data),
+                data["season"].min(),
+                data["season"].max(),
             )
-
             return True
-
-        except Exception as e:
-            logger.error(f"Could not load data: {e}")
+        except (OSError, ValueError, KeyError, ImportError) as exc:
+            logger.error("Could not load research data: %s", exc)
             return False
 
-    def test_hypothesis(self, name: str, condition, bet_outcome, min_sample=30):
-        """
-        Test a betting hypothesis.
+    def test_hypothesis(
+        self,
+        name: str,
+        condition: pd.Series,
+        outcome: pd.Series,
+        *,
+        min_sample: int = 30,
+        family: str = "unspecified",
+        outcome_definition: str = "binary historical outcome association",
+        null_probability: float = 0.5,
+    ) -> Optional[dict[str, Any]]:
+        """Record one in-sample association; never promote or estimate ROI."""
 
-        Args:
-            name: Name of the hypothesis
-            condition: Boolean series indicating when to bet
-            bet_outcome: Boolean series indicating if bet won
-            min_sample: Minimum sample size required
-        """
+        if self.data is None:
+            raise RuntimeError("load_data must succeed before testing hypotheses")
         self.tests_run += 1
+        self._finalized = False
 
-        # Filter to condition
-        sample = self.data[condition].copy()
-
-        if len(sample) < min_sample:
+        mask = pd.Series(condition, index=self.data.index).fillna(False).astype(bool)
+        outcome_series = pd.Series(outcome, index=self.data.index)
+        valid = mask & outcome_series.notna()
+        total = int(valid.sum())
+        if total < min_sample:
             return None
 
-        # Calculate metrics
-        wins = bet_outcome[condition].sum()
-        total = len(sample)
-        win_rate = wins / total if total > 0 else 0
+        selected = outcome_series[valid]
+        invalid_values = set(selected.unique()) - {0, 1, False, True}
+        if invalid_values:
+            raise ValueError(f"outcome contains non-binary values: {invalid_values}")
 
-        # Statistical significance (binomial test vs 52.4% break-even)
-        break_even = 0.524  # Need to beat vig
-        try:
-            # Newer scipy API
-            result = stats.binomtest(wins, total, break_even, alternative="greater")
-            p_value = result.pvalue
-        except AttributeError:
-            # Older scipy API
-            p_value = stats.binom_test(wins, total, break_even, alternative="greater")
+        wins = int(selected.astype(int).sum())
+        win_rate = wins / total
+        p_value = float(
+            stats.binomtest(wins, total, null_probability, alternative="greater").pvalue
+        )
+        sample = self.data.loc[valid]
 
-        # Effect size (how much better than break-even)
-        effect_size = win_rate - break_even
+        result = {
+            "test_id": f"{self.analysis_window}:{len(self.hypotheses) + 1}",
+            "name": name,
+            "family": family,
+            "analysis_window": self.analysis_window,
+            "sample_size": total,
+            "wins": wins,
+            "losses": total - wins,
+            "win_rate": win_rate,
+            "null_probability": null_probability,
+            "association_lift": win_rate - null_probability,
+            "raw_p_value": p_value,
+            "wilson_lower_bound": wilson_lower_bound(wins, total),
+            "seasons": f"{sample['season'].min()}-{sample['season'].max()}",
+            "outcome_definition": outcome_definition,
+            "evidence_status": "research_only",
+            "uses_actual_market_prices": False,
+            "has_independent_temporal_holdout": False,
+            "has_executable_condition": False,
+            "promotion_eligible": False,
+        }
+        self.hypotheses.append(result)
+        return result
 
-        # Only report if significant and positive edge
-        if p_value < 0.05 and win_rate > break_even:
-            # Calculate ROI
-            roi = (win_rate * 0.909 - (1 - win_rate)) * 100
+    def test_basic_edges(self) -> None:
+        logger.info("Testing basic historical associations")
+        if self.data is None:
+            raise RuntimeError("data not loaded")
 
-            edge = {
-                "name": name,
-                "sample_size": total,
-                "wins": wins,
-                "losses": total - wins,
-                "win_rate": win_rate,
-                "edge": effect_size,
-                "p_value": p_value,
-                "significance": "High" if p_value < 0.01 else "Medium",
-                "seasons": f"{sample['season'].min()}-{sample['season'].max()}",
-                "roi": roi,
-            }
-
-            # Check if similar strategy already exists in registry
-            similar = self.registry.find_similar_strategy(name, threshold=0.85)
-
-            if similar:
-                # Similar strategy found - compare metrics to decide if we should update
-                new_roi = roi
-                old_roi = similar.roi
-
-                if new_roi > old_roi:
-                    # New strategy is BETTER - archive old and add new
-                    logger.info(
-                        f"  UPGRADE: '{name}' ROI {old_roi:.1f}% -> {new_roi:.1f}%"
-                    )
-
-                    # Archive the old strategy
-                    self.registry.archive_strategy(
-                        similar.strategy_id,
-                        f"Replaced by better version (ROI: {old_roi:.1f}% -> {new_roi:.1f}%)",
-                    )
-
-                    # Create new strategy
-                    strategy_id = (
-                        name.lower()
-                        .replace(" ", "_")
-                        .replace(":", "")
-                        .replace("+", "and")
-                        .replace("-", "_")
-                        .replace("__", "_")
-                        + f"_v{similar.version + 1}"
-                    )
-
-                    strategy = Strategy(
-                        strategy_id=strategy_id,
-                        name=name,
-                        description=f"Discovered edge: {name} (upgraded from v{similar.version})",
-                        pattern=name,
-                        win_rate=win_rate * 100,
-                        roi=roi,
-                        sample_size=total,
-                        edge=effect_size * 100,
-                        version=similar.version + 1,
-                        conditions={
-                            "seasons": f"{sample['season'].min()}-{sample['season'].max()}"
-                        },
-                    )
-
-                    success, message = self.registry.add_strategy(
-                        strategy, skip_duplicate_check=True
-                    )
-                    edge["registry_status"] = (
-                        f"UPGRADED (v{similar.version} -> v{similar.version + 1})"
-                    )
-                    edge["is_new"] = success
-                    if success:
-                        self.new_strategies_count += 1
-                else:
-                    # Existing strategy is BETTER or EQUAL - skip
-                    edge["registry_status"] = (
-                        f"SKIPPED (existing {similar.name} has ROI {old_roi:.1f}% >= {new_roi:.1f}%)"
-                    )
-                    edge["is_new"] = False
-                    self.duplicate_strategies_count += 1
-            else:
-                # New strategy - add to registry
-                strategy_id = (
-                    name.lower()
-                    .replace(" ", "_")
-                    .replace(":", "")
-                    .replace("+", "and")
-                    .replace("-", "_")
-                    .replace("__", "_")
-                    + "_v1"
-                )
-
-                strategy = Strategy(
-                    strategy_id=strategy_id,
-                    name=name,
-                    description=f"Discovered edge: {name}",
-                    pattern=name,  # Use name as pattern
-                    win_rate=win_rate * 100,  # Convert to percentage
-                    roi=roi,
-                    sample_size=total,
-                    edge=effect_size * 100,  # Convert to percentage
-                    conditions={
-                        "seasons": f"{sample['season'].min()}-{sample['season'].max()}"
-                    },
-                )
-
-                success, message = self.registry.add_strategy(strategy)
-                edge["registry_status"] = "NEW" if success else "ERROR"
-                edge["is_new"] = success
-                if success:
-                    self.new_strategies_count += 1
-
-            self.edges_found.append(edge)
-            return edge
-
-        return None
-
-    def test_basic_edges(self):
-        """Test basic betting edges."""
-        logger.info("\n" + "=" * 80)
-        logger.info("TESTING BASIC EDGES")
-        logger.info("=" * 80)
-
-        # 1. HOME FAVORITES
         if "elo_diff" in self.data.columns:
-            condition = self.data["elo_diff"] > 100  # Home heavily favored
-            outcome = self.data["home_win"]
-            self.test_hypothesis("Home Favorites (Elo > 100)", condition, outcome)
+            self.test_hypothesis(
+                "Home Favorites (Elo > 100)",
+                self.data["elo_diff"] > 100,
+                self.data["home_win"],
+                family="moneyline_outcome",
+                outcome_definition="home team won outright; no moneyline price evaluated",
+            )
 
-        # 2. REST ADVANTAGE
-        if (
-            "rest_days_home" in self.data.columns
-            and "rest_days_away" in self.data.columns
-        ):
+        if {"rest_days_home", "rest_days_away"}.issubset(self.data.columns):
             rest_diff = self.data["rest_days_home"] - self.data["rest_days_away"]
+            self.test_hypothesis(
+                "Home Team: 3+ More Rest Days",
+                rest_diff >= 3,
+                self.data["home_win"],
+                family="moneyline_outcome",
+                outcome_definition="home team won outright; no moneyline price evaluated",
+            )
+            self.test_hypothesis(
+                "Away Team: 3+ More Rest Days",
+                rest_diff <= -3,
+                1 - self.data["home_win"],
+                family="moneyline_outcome",
+                outcome_definition="away team won outright; no moneyline price evaluated",
+            )
 
-            # Home team has 3+ more rest days
-            condition = rest_diff >= 3
-            outcome = self.data["home_win"]
-            self.test_hypothesis("Home Team: 3+ More Rest Days", condition, outcome)
-
-            # Away team has 3+ more rest days
-            condition = rest_diff <= -3
-            outcome = 1 - self.data["home_win"]
-            self.test_hypothesis("Away Team: 3+ More Rest Days", condition, outcome)
-
-        # 3. POST-BYE
         if "post_bye_home" in self.data.columns:
-            condition = self.data["post_bye_home"] == 1
-            outcome = self.data["home_win"]
-            self.test_hypothesis("Home Team Post-Bye", condition, outcome)
-
+            self.test_hypothesis(
+                "Home Team Post-Bye",
+                self.data["post_bye_home"] == 1,
+                self.data["home_win"],
+                family="moneyline_outcome",
+                outcome_definition="home team won outright; no moneyline price evaluated",
+            )
         if "post_bye_away" in self.data.columns:
-            condition = self.data["post_bye_away"] == 1
-            outcome = 1 - self.data["home_win"]
-            self.test_hypothesis("Away Team Post-Bye", condition, outcome)
-
-        # 4. DIVISIONAL GAMES
+            self.test_hypothesis(
+                "Away Team Post-Bye",
+                self.data["post_bye_away"] == 1,
+                1 - self.data["home_win"],
+                family="moneyline_outcome",
+                outcome_definition="away team won outright; no moneyline price evaluated",
+            )
         if "div_game" in self.data.columns:
-            condition = self.data["div_game"] == 1
-
-            # Test if home team wins more in division games
-            outcome = self.data["home_win"]
-            self.test_hypothesis("Divisional Games: Home Team", condition, outcome)
-
-        # 5. DOME GAMES
-        if "is_dome" in self.data.columns:
-            condition = self.data["is_dome"] == 1
-
-            # Test if home team wins more in dome
-            outcome = self.data["home_win"]
-            self.test_hypothesis("Dome Games: Home Team", condition, outcome)
-
-    def test_weather_edges(self):
-        """Test weather-related edges."""
-        logger.info("\n" + "=" * 80)
-        logger.info("TESTING WEATHER EDGES")
-        logger.info("=" * 80)
-
-        # 1. COLD + WIND = UNDER
-        if "is_cold" in self.data.columns and "is_windy" in self.data.columns:
-            condition = (self.data["is_cold"] == 1) & (self.data["is_windy"] == 1)
-
-            # Bet under (total < historical average)
-            historical_avg = self.data["total_points"].mean()
-            outcome = self.data["total_points"] < historical_avg
-            self.test_hypothesis("Cold + Windy = UNDER", condition, outcome)
-
-        # 2. DOME = OVER
-        if "is_dome" in self.data.columns:
-            condition = self.data["is_dome"] == 1
-            outcome = self.data["total_points"] > self.data["total_points"].mean()
-            self.test_hypothesis("Dome Games = OVER", condition, outcome)
-
-        # 3. COLD WEATHER = HOME TEAM ADVANTAGE
-        if "is_cold" in self.data.columns and "roof" in self.data.columns:
-            # Cold weather outdoor game
-            condition = self.data["is_cold"] == 1
-            outcome = self.data["home_win"]
-            self.test_hypothesis("Cold Weather: Home Advantage", condition, outcome)
-
-    def test_epa_edges(self):
-        """Test EPA-based edges."""
-        logger.info("\n" + "=" * 80)
-        logger.info("TESTING EPA EDGES")
-        logger.info("=" * 80)
-
-        # 1. STRONG OFFENSE VS WEAK DEFENSE
-        if all(
-            col in self.data.columns for col in ["epa_offense_home", "epa_defense_away"]
-        ):
-            condition = (self.data["epa_offense_home"] > 0.1) & (
-                self.data["epa_defense_away"] < -0.1
-            )
-            outcome = self.data["home_win"]
             self.test_hypothesis(
-                "Strong Home Offense vs Weak Away Defense", condition, outcome
+                "Divisional Games: Home Team",
+                self.data["div_game"] == 1,
+                self.data["home_win"],
+                family="moneyline_outcome",
+                outcome_definition="home team won outright; no moneyline price evaluated",
             )
-
-        if all(
-            col in self.data.columns for col in ["epa_offense_away", "epa_defense_home"]
-        ):
-            condition = (self.data["epa_offense_away"] > 0.1) & (
-                self.data["epa_defense_home"] < -0.1
-            )
-            outcome = 1 - self.data["home_win"]
+        if "is_dome" in self.data.columns:
             self.test_hypothesis(
-                "Strong Away Offense vs Weak Home Defense", condition, outcome
+                "Dome Games: Home Team",
+                self.data["is_dome"] == 1,
+                self.data["home_win"],
+                family="moneyline_outcome",
+                outcome_definition="home team won outright; no moneyline price evaluated",
             )
 
-        # 2. EXPLOSIVE OFFENSE MATCHUP
-        if all(
-            col in self.data.columns
-            for col in ["epa_explosive_rate_home", "epa_explosive_rate_away"]
+    def test_weather_edges(self) -> None:
+        logger.info("Testing weather/scoring associations")
+        if self.data is None:
+            raise RuntimeError("data not loaded")
+
+        historical_mean = self.data["total_points"].mean()
+        if {"is_cold", "is_windy"}.issubset(self.data.columns):
+            self.test_hypothesis(
+                "Cold + Windy: Below Dataset Mean Total",
+                (self.data["is_cold"] == 1) & (self.data["is_windy"] == 1),
+                self.data["total_points"] < historical_mean,
+                family="scoring_association",
+                outcome_definition=(
+                    "total points below the full-dataset mean; this is not a sportsbook "
+                    "under result"
+                ),
+            )
+        if "is_dome" in self.data.columns:
+            self.test_hypothesis(
+                "Dome Games: Above Dataset Mean Total",
+                self.data["is_dome"] == 1,
+                self.data["total_points"] > historical_mean,
+                family="scoring_association",
+                outcome_definition=(
+                    "total points above the full-dataset mean; this is not a sportsbook "
+                    "over result"
+                ),
+            )
+        if "is_cold" in self.data.columns:
+            self.test_hypothesis(
+                "Cold Weather: Home Win Association",
+                self.data["is_cold"] == 1,
+                self.data["home_win"],
+                family="moneyline_outcome",
+                outcome_definition="home team won outright; no moneyline price evaluated",
+            )
+
+    def test_epa_edges(self) -> None:
+        logger.info("Testing EPA associations")
+        if self.data is None:
+            raise RuntimeError("data not loaded")
+
+        if {"epa_offense_home", "epa_defense_away"}.issubset(self.data.columns):
+            self.test_hypothesis(
+                "Strong Home Offense vs Weak Away Defense",
+                (self.data["epa_offense_home"] > 0.1)
+                & (self.data["epa_defense_away"] < -0.1),
+                self.data["home_win"],
+                family="moneyline_outcome",
+                outcome_definition="home team won outright; no moneyline price evaluated",
+            )
+        if {"epa_offense_away", "epa_defense_home"}.issubset(self.data.columns):
+            self.test_hypothesis(
+                "Strong Away Offense vs Weak Home Defense",
+                (self.data["epa_offense_away"] > 0.1)
+                & (self.data["epa_defense_home"] < -0.1),
+                1 - self.data["home_win"],
+                family="moneyline_outcome",
+                outcome_definition="away team won outright; no moneyline price evaluated",
+            )
+        if {"epa_explosive_rate_home", "epa_explosive_rate_away"}.issubset(
+            self.data.columns
         ):
-            condition = (self.data["epa_explosive_rate_home"] > 0.15) | (
-                self.data["epa_explosive_rate_away"] > 0.15
+            self.test_hypothesis(
+                "Explosive Offense Present: Above Dataset Median Total",
+                (self.data["epa_explosive_rate_home"] > 0.15)
+                | (self.data["epa_explosive_rate_away"] > 0.15),
+                self.data["total_points"] > self.data["total_points"].median(),
+                family="scoring_association",
+                outcome_definition=(
+                    "total points above the full-dataset median; this is not a "
+                    "sportsbook over result"
+                ),
             )
-            outcome = self.data["total_points"] > self.data["total_points"].median()
-            self.test_hypothesis("Explosive Offense Present = OVER", condition, outcome)
 
-    def test_situational_edges(self):
-        """Test situational edges."""
-        logger.info("\n" + "=" * 80)
-        logger.info("TESTING SITUATIONAL EDGES")
-        logger.info("=" * 80)
+    def test_situational_edges(self) -> None:
+        logger.info("Testing situational associations")
+        if self.data is None:
+            raise RuntimeError("data not loaded")
 
-        # 1. BACK-TO-BACK DISADVANTAGE
         if "is_back_to_back_home" in self.data.columns:
-            condition = self.data["is_back_to_back_home"] == 1
-            outcome = 1 - self.data["home_win"]  # Bet against home team
-            self.test_hypothesis("Fade Home Team on Back-to-Back", condition, outcome)
-
-        if "is_back_to_back_away" in self.data.columns:
-            condition = self.data["is_back_to_back_away"] == 1
-            outcome = self.data["home_win"]  # Bet home team
-            self.test_hypothesis("Bet Home vs Away on Back-to-Back", condition, outcome)
-
-        # 2. INJURY DISADVANTAGE
-        if all(
-            col in self.data.columns
-            for col in ["injury_count_home", "injury_count_away"]
-        ):
-            # Home team has 5+ more injuries
-            inj_diff = self.data["injury_count_home"] - self.data["injury_count_away"]
-            condition = inj_diff >= 5
-            outcome = 1 - self.data["home_win"]
-            self.test_hypothesis("Fade Home Team: 5+ More Injuries", condition, outcome)
-
-            # Away team has 5+ more injuries
-            condition = inj_diff <= -5
-            outcome = self.data["home_win"]
             self.test_hypothesis(
-                "Bet Home vs Away: 5+ More Injuries", condition, outcome
+                "Fade Home Team on Back-to-Back",
+                self.data["is_back_to_back_home"] == 1,
+                1 - self.data["home_win"],
+                family="moneyline_outcome",
+                outcome_definition="away team won outright; no moneyline price evaluated",
+            )
+        if "is_back_to_back_away" in self.data.columns:
+            self.test_hypothesis(
+                "Bet Home vs Away on Back-to-Back",
+                self.data["is_back_to_back_away"] == 1,
+                self.data["home_win"],
+                family="moneyline_outcome",
+                outcome_definition="home team won outright; no moneyline price evaluated",
+            )
+        if {"injury_count_home", "injury_count_away"}.issubset(self.data.columns):
+            injury_diff = (
+                self.data["injury_count_home"] - self.data["injury_count_away"]
+            )
+            self.test_hypothesis(
+                "Fade Home Team: 5+ More Injuries",
+                injury_diff >= 5,
+                1 - self.data["home_win"],
+                family="moneyline_outcome",
+                outcome_definition="away team won outright; no moneyline price evaluated",
+            )
+            self.test_hypothesis(
+                "Bet Home vs Away: 5+ More Injuries",
+                injury_diff <= -5,
+                self.data["home_win"],
+                family="moneyline_outcome",
+                outcome_definition="home team won outright; no moneyline price evaluated",
             )
 
-    def test_seasonal_edges(self):
-        """Test edges that vary by time of season."""
-        logger.info("\n" + "=" * 80)
-        logger.info("TESTING SEASONAL EDGES")
-        logger.info("=" * 80)
-
+    def test_seasonal_edges(self) -> None:
+        logger.info("Testing seasonal associations")
+        if self.data is None:
+            raise RuntimeError("data not loaded")
         if "week" not in self.data.columns:
             return
 
-        # 1. EARLY SEASON (Weeks 1-4)
-        condition = self.data["week"] <= 4
-
-        # Home favorites more reliable early?
         if "elo_diff" in self.data.columns:
-            early_home_fav = condition & (self.data["elo_diff"] > 50)
-            outcome = self.data["home_win"]
             self.test_hypothesis(
-                "Early Season: Home Favorites", early_home_fav, outcome
+                "Early Season: Home Favorites",
+                (self.data["week"] <= 4) & (self.data["elo_diff"] > 50),
+                self.data["home_win"],
+                family="moneyline_outcome",
+                outcome_definition="home team won outright; no moneyline price evaluated",
             )
-
-        # 2. LATE SEASON (Weeks 15+)
-        condition = self.data["week"] >= 15
-
-        # Playoff-bound teams vs eliminated teams
-        if "win_pct_home" in self.data.columns and "win_pct_away" in self.data.columns:
-            # Home team has winning record, away team doesn't
-            late_mismatch = (
-                condition
+        if {"win_pct_home", "win_pct_away"}.issubset(self.data.columns):
+            self.test_hypothesis(
+                "Late Season: Winning Home vs Losing Away",
+                (self.data["week"] >= 15)
                 & (self.data["win_pct_home"] > 0.6)
-                & (self.data["win_pct_away"] < 0.4)
-            )
-            outcome = self.data["home_win"]
-            self.test_hypothesis(
-                "Late Season: Playoff Team vs Eliminated Team", late_mismatch, outcome
+                & (self.data["win_pct_away"] < 0.4),
+                self.data["home_win"],
+                family="moneyline_outcome",
+                outcome_definition="home team won outright; no moneyline price evaluated",
             )
 
-    def test_combination_edges(self):
-        """Test combinations of factors."""
-        logger.info("\n" + "=" * 80)
-        logger.info("TESTING COMBINATION EDGES")
-        logger.info("=" * 80)
+    def test_combination_edges(self) -> None:
+        logger.info("Testing combination associations")
+        if self.data is None:
+            raise RuntimeError("data not loaded")
 
-        # 1. PERFECT STORM: Rest + Bye + Home
-        if all(
-            col in self.data.columns
-            for col in ["rest_days_home", "rest_days_away", "post_bye_home"]
+        if {"rest_days_home", "rest_days_away", "post_bye_home"}.issubset(
+            self.data.columns
         ):
             rest_diff = self.data["rest_days_home"] - self.data["rest_days_away"]
-            condition = (rest_diff >= 3) & (self.data["post_bye_home"] == 1)
-            outcome = self.data["home_win"]
             self.test_hypothesis(
-                "Perfect Storm: Home Post-Bye + 3+ Rest Advantage", condition, outcome
+                "Home Post-Bye + 3+ Rest Advantage",
+                (rest_diff >= 3) & (self.data["post_bye_home"] == 1),
+                self.data["home_win"],
+                family="moneyline_outcome",
+                outcome_definition="home team won outright; no moneyline price evaluated",
             )
-
-        # 2. DOME + STRONG OFFENSE + WEAK DEFENSE
-        if all(
-            col in self.data.columns
-            for col in ["is_dome", "epa_offense_home", "epa_defense_away"]
+        if {"is_dome", "epa_offense_home", "epa_defense_away"}.issubset(
+            self.data.columns
         ):
-            condition = (
+            self.test_hypothesis(
+                "Dome + Strong Home Offense vs Weak Away Defense",
                 (self.data["is_dome"] == 1)
                 & (self.data["epa_offense_home"] > 0.1)
-                & (self.data["epa_defense_away"] < -0.1)
+                & (self.data["epa_defense_away"] < -0.1),
+                self.data["home_win"],
+                family="moneyline_outcome",
+                outcome_definition="home team won outright; no moneyline price evaluated",
             )
-            outcome = self.data["home_win"]
+        if {"div_game", "elo_diff"}.issubset(self.data.columns):
             self.test_hypothesis(
-                "Dome + Strong Home O vs Weak Away D", condition, outcome
+                "Divisional Game: Home Elo Underdog",
+                (self.data["div_game"] == 1) & (self.data["elo_diff"] < -50),
+                self.data["home_win"],
+                family="moneyline_outcome",
+                outcome_definition="home team won outright; no moneyline price evaluated",
             )
 
-        # 3. DIVISIONAL + UNDERDOG
-        if all(col in self.data.columns for col in ["div_game", "elo_diff"]):
-            condition = (self.data["div_game"] == 1) & (
-                self.data["elo_diff"] < -50
-            )  # Home is underdog
-            outcome = self.data["home_win"]
-            self.test_hypothesis("Divisional Game: Home Underdog", condition, outcome)
+    def test_recent_performance_edges(self) -> None:
+        """Repeat selected screens on recent seasons without treating them as holdout."""
 
-    def test_recent_performance_edges(self):
-        """Test edges based on recent performance (2023-2024 only)."""
-        logger.info("\n" + "=" * 80)
-        logger.info("TESTING RECENT EDGES (2023-2024 ONLY)")
-        logger.info("=" * 80)
-
+        if self.data is None:
+            raise RuntimeError("data not loaded")
         recent = self.data[self.data["season"] >= 2023].copy()
-
         if len(recent) < 100:
-            logger.warning("Not enough recent data")
+            logger.warning("Not enough recent data for the recent-window screen")
             return
 
-        # Save original data
-        orig_data = self.data
-        self.data = recent
+        original_data = self.data
+        original_window = self.analysis_window
+        try:
+            self.data = recent
+            self.analysis_window = "recent_2023_plus_reused_for_screening"
+            self.test_basic_edges()
+            self.test_weather_edges()
+            self.test_epa_edges()
+        finally:
+            self.data = original_data
+            self.analysis_window = original_window
 
-        # Re-run all tests on recent data only
-        self.test_basic_edges()
-        self.test_weather_edges()
-        self.test_epa_edges()
+    def finalize_results(
+        self, max_adjusted_p_value: float = 0.05
+    ) -> list[dict[str, Any]]:
+        """Apply FDR correction and classify research candidates read-only."""
 
-        # Restore original data
-        self.data = orig_data
+        if not self.hypotheses:
+            self.research_candidates = []
+            self._finalized = True
+            return []
 
-    def rank_edges(self):
-        """Rank discovered edges by strength."""
-        if not self.edges_found:
+        adjusted = benjamini_hochberg(
+            result["raw_p_value"] for result in self.hypotheses
+        )
+        candidates: list[dict[str, Any]] = []
+        for result, adjusted_p_value in zip(self.hypotheses, adjusted):
+            result["adjusted_p_value"] = adjusted_p_value
+            result["passes_fdr_screen"] = (
+                adjusted_p_value <= max_adjusted_p_value
+                and result["association_lift"] > 0
+            )
+            result["promotion_blockers"] = (
+                "same sample used for screening and estimation; "
+                "no independent temporal holdout; actual market line/price absent; "
+                "condition not serialized as executable code"
+            )
+            if result["passes_fdr_screen"]:
+                candidate = dict(result)
+                similar = self.registry.find_similar_strategy(
+                    candidate["name"], candidate["name"], threshold=0.85
+                )
+                candidate["registry_match"] = (
+                    f"{similar.strategy_id} ({similar.name})" if similar else "none"
+                )
+                candidates.append(candidate)
+
+        self.research_candidates = candidates
+        self.edges_found = []
+        self._finalized = True
+        return candidates
+
+    def rank_candidates(self) -> pd.DataFrame:
+        if not self._finalized:
+            self.finalize_results()
+        if not self.research_candidates:
             return pd.DataFrame()
-
-        df = pd.DataFrame(self.edges_found)
-
-        # Calculate composite score
-        # Higher score = better edge
-        df["score"] = (
-            df["edge"] * 100  # Edge percentage (main factor)
-            + (df["sample_size"] / 10)  # Reward larger samples
-            + (1 - df["p_value"]) * 10  # Reward statistical significance
+        frame = pd.DataFrame(self.research_candidates)
+        return frame.sort_values(
+            ["wilson_lower_bound", "adjusted_p_value", "sample_size"],
+            ascending=[False, True, False],
         )
 
-        df = df.sort_values("score", ascending=False)
+    def print_results(self) -> None:
+        if not self._finalized:
+            self.finalize_results()
 
-        return df
-
-    def print_results(self):
-        """Print all discovered edges."""
-        logger.info("\n" + "=" * 80)
-        logger.info("BULLDOG MODE: EDGE DISCOVERY RESULTS")
-        logger.info("=" * 80)
-
-        logger.info(f"\nTests run: {self.tests_run}")
-        logger.info(f"Edges found: {len(self.edges_found)}")
-
-        # Registry summary
-        logger.info("\n" + "=" * 80)
-        logger.info("STRATEGY REGISTRY SUMMARY")
-        logger.info("=" * 80)
-        logger.info(f"New strategies added: {self.new_strategies_count}")
-        logger.info(f"Duplicates skipped: {self.duplicate_strategies_count}")
-
-        registry_stats = self.registry.get_stats()
-        logger.info(f"\nRegistry totals:")
-        logger.info(f"  - Pending review: {registry_stats['pending']}")
-        logger.info(f"  - Accepted: {registry_stats['accepted']}")
-        logger.info(f"  - Rejected: {registry_stats['rejected']}")
-        logger.info(f"  - Archived: {registry_stats['archived']}")
-        logger.info(f"  - TOTAL: {registry_stats['total']}")
-
-        if not self.edges_found:
-            logger.info("\nNO EDGES FOUND")
-            logger.info(
-                "Market appears efficient. All tested hypotheses failed to show significant edge."
-            )
-            return
-
-        df = self.rank_edges()
-
-        logger.info("\n" + "=" * 80)
-        logger.info("TOP 10 BETTING EDGES (Ranked by Strength)")
-        logger.info("=" * 80)
-
-        for idx, edge in df.head(10).iterrows():
-            # Show registry status
-            status_marker = "[NEW]" if edge.get("is_new", False) else "[KNOWN]"
-
-            logger.info(f"\n{'-'*80}")
-            logger.info(
-                f"EDGE #{df.index.get_loc(idx) + 1}: {edge['name']} {status_marker}"
-            )
-            logger.info(f"{'-'*80}")
-            logger.info(
-                f"Win Rate: {edge['win_rate']:.1%} ({edge['wins']}/{edge['sample_size']} bets)"
-            )
-            logger.info(f"Edge: +{edge['edge']:.1%} above break-even")
-            logger.info(
-                f"Statistical Significance: {edge['significance']} (p={edge['p_value']:.4f})"
-            )
-            logger.info(f"Sample: {edge['sample_size']} games ({edge['seasons']})")
-            logger.info(f"Strength Score: {edge['score']:.1f}")
-
-            # ROI estimation
-            if "roi" in edge:
-                logger.info(f"Estimated ROI: +{edge['roi']:.1f}% (at -110 odds)")
-
-            # Registry status
-            if "registry_status" in edge:
-                logger.info(f"Registry Status: {edge['registry_status']}")
-
-        # Save to CSV
-        output_path = Path("reports/bulldog_edges_discovered.csv")
-        output_path.parent.mkdir(exist_ok=True)
-        df.to_csv(output_path, index=False)
-        logger.info(f"\nFull results saved to: {output_path}")
-
-        logger.info("\n" + "=" * 80)
-        logger.info("BULLDOG MODE COMPLETE")
-        logger.info("=" * 80)
-        logger.info(f"\nNext steps:")
+        logger.info("\n%s", "=" * 80)
+        logger.info("BULLDOG RESEARCH SCREEN RESULTS")
+        logger.info("%s", "=" * 80)
+        logger.info("Tests attempted: %s", self.tests_run)
+        logger.info("Evaluable hypotheses: %s", len(self.hypotheses))
         logger.info(
-            f"1. Review new strategies in dashboard: python -m streamlit run dashboard/app.py"
+            "FDR-passing research candidates: %s", len(self.research_candidates)
         )
-        logger.info(f"2. Click the 'STRATEGIES' tab")
+        logger.info("Registry writes: 0 (enforced)")
+
+        self.report_dir.mkdir(parents=True, exist_ok=True)
+        all_path = self.report_dir / "bulldog_hypotheses_all.csv"
+        pd.DataFrame(self.hypotheses).to_csv(all_path, index=False)
+
+        ranked = self.rank_candidates()
+        candidate_path = self.report_dir / "bulldog_research_candidates.csv"
+        ranked.to_csv(candidate_path, index=False)
+
+        if ranked.empty:
+            logger.info("No associations survived the FDR screen.")
+        else:
+            logger.info("\nTop research candidates (not betting recommendations):")
+            for rank, (_, candidate) in enumerate(ranked.head(10).iterrows(), start=1):
+                logger.info(
+                    "%s. %s | WR %.1f%% | n=%s | adjusted p=%.4g | Wilson LB=%.1f%%",
+                    rank,
+                    candidate["name"],
+                    candidate["win_rate"] * 100,
+                    candidate["sample_size"],
+                    candidate["adjusted_p_value"],
+                    candidate["wilson_lower_bound"] * 100,
+                )
+
+        logger.info("All hypothesis results: %s", all_path)
+        logger.info("Research candidates: %s", candidate_path)
         logger.info(
-            f"3. Accept or reject the {self.new_strategies_count} pending strategies"
+            "Promotion remains blocked until a separate temporal holdout is tested "
+            "against actual market lines/prices with an executable condition."
         )
 
 
-def main():
-    """Run bulldog edge discovery."""
-
+def main() -> None:
     print("\n" + "=" * 80)
-    print("BULLDOG MODE: EDGE DISCOVERY")
+    print("BULLDOG RESEARCH-ONLY HYPOTHESIS SCREEN")
     print("=" * 80)
-    print("\nRELENTLESSLY SEARCHING FOR BETTING EDGES...")
-    print("Testing hundreds of hypotheses. Won't stop until edges are found.\n")
-    print("=" * 80 + "\n")
+    print("No strategy-registry writes and no profitability claims are permitted.\n")
 
     bulldog = BulldogEdgeDiscovery()
-
-    # Show existing registry stats
     registry_stats = bulldog.registry.get_stats()
-    print(f"Strategy Registry loaded: {registry_stats['total']} existing strategies")
     print(
-        f"  - {registry_stats['pending']} pending | {registry_stats['accepted']} accepted | "
-        f"{registry_stats['rejected']} rejected | {registry_stats['archived']} archived"
+        "Strategy Registry loaded read-only: "
+        f"{registry_stats['total']} records; {registry_stats['deployable']} evidence-deployable"
     )
-    print(f"  - Duplicate detection enabled (85% similarity threshold)\n")
 
     if not bulldog.load_data():
-        print("ERROR: Could not load data")
-        return
+        raise SystemExit("Could not load historical data")
 
-    # Run all tests
     bulldog.test_basic_edges()
     bulldog.test_weather_edges()
     bulldog.test_epa_edges()
@@ -624,8 +531,7 @@ def main():
     bulldog.test_seasonal_edges()
     bulldog.test_combination_edges()
     bulldog.test_recent_performance_edges()
-
-    # Print results
+    bulldog.finalize_results()
     bulldog.print_results()
 
 

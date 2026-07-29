@@ -1,196 +1,66 @@
-"""
-Start Autonomous Betting System
+"""Disabled entry point for the historical autonomous betting system.
 
-Main entry point for the autonomous system.
-Starts all agents, swarms, and monitoring systems.
+The repository is research/paper-trading only. Starting agents, swarms,
+notifications, remediation loops, and continuous backtests under an
+"autonomous betting" entry point would exceed the current authority envelope.
 """
+
+from __future__ import annotations
 
 import asyncio
-import logging
-import signal
-import sys
+import json
+import os
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Dict
 
-# Add project root to path
-sys.path.append(str(Path(__file__).parent.parent))
+from src.betting.decision_contracts import PAPER_AUTHORITY
 
-from agents.api_integrations import TheOddsAPI
-from src.agents import (
-    DataEngineeringAgent,
-    MarketIntelligenceAgent,
-    OrchestratorAgent,
-    PerformanceAnalystAgent,
-    RiskManagementAgent,
-    StrategyAnalystAgent,
-    agent_registry,
-    message_bus,
+_DISABLED_REASON = (
+    "autonomous betting runtime is disabled until model, market, settlement, "
+    "paper-trading, and explicit human authorization gates pass"
 )
-from src.agents.worker_agents import (
-    APIManagerAgent,
-    DatabaseAgent,
-    LoggingAgent,
-    NotificationAgent,
-    SelfHealingAgent,
-)
-from src.api.request_orchestrator import RequestOrchestrator
-from src.audit import SystemConnectivityAuditor
-from src.backtesting.ai_orchestrator import AIBacktestOrchestrator
-from src.self_healing import AnomalyDetector, AutoRemediation, MonitoringLayer
-from src.swarms import ConsensusSwarm, StrategyGenerationSwarm, ValidationSwarm
-from src.utils.odds_cache import OddsCache
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+
+class AutonomousExecutionBlockedError(RuntimeError):
+    """Raised when the historical autonomous runtime is started."""
 
 
 class AutonomousSystem:
-    """Main autonomous system orchestrator."""
+    """Compatibility object that cannot start operational agents."""
 
-    def __init__(self):
-        """Initialize autonomous system."""
-        logger.info("Initializing Autonomous Betting System...")
+    def __init__(self) -> None:
+        self.status = "BLOCKED"
 
-        # Infrastructure
-        self.cache = OddsCache()
-        self.orchestrator = RequestOrchestrator(cache=self.cache)
-        self.monitoring = MonitoringLayer()
-        self.anomaly_detector = AnomalyDetector(self.monitoring)
-        self.auto_remediation = AutoRemediation()
-        self.connectivity_auditor = SystemConnectivityAuditor()
+    def receipt(self) -> Dict[str, Any]:
+        return {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "status": "NO_BET",
+            "runtime": "autonomous_system",
+            "reason": _DISABLED_REASON,
+            "authority": PAPER_AUTHORITY,
+            "live_wagers_authorized": False,
+            "agents_started": 0,
+        }
 
-        # Agents
-        self.orchestrator_agent = OrchestratorAgent()
-        self.strategy_analyst = StrategyAnalystAgent()
-        odds_api = TheOddsAPI(use_cache=True)
-        self.market_intel = MarketIntelligenceAgent(odds_api=odds_api)
-        self.data_eng = DataEngineeringAgent()
-        self.risk_mgmt = RiskManagementAgent()
-        self.perf_analyst = PerformanceAnalystAgent()
+    async def start(self) -> None:
+        raise AutonomousExecutionBlockedError(_DISABLED_REASON)
 
-        # Worker agents
-        self.api_manager = APIManagerAgent(self.orchestrator)
-        self.database_agent = DatabaseAgent()
-        self.notification_agent = NotificationAgent()
-        self.logging_agent = LoggingAgent()
-        self.self_healing_agent = SelfHealingAgent()
-
-        # Register all agents
-        all_agents = [
-            self.orchestrator_agent,
-            self.strategy_analyst,
-            self.market_intel,
-            self.data_eng,
-            self.risk_mgmt,
-            self.perf_analyst,
-            self.api_manager,
-            self.database_agent,
-            self.notification_agent,
-            self.logging_agent,
-            self.self_healing_agent,
-        ]
-
-        for agent in all_agents:
-            agent_registry.register(agent)
-            message_bus.subscribe(agent)
-
-        # Swarms
-        strategy_agents = [self.strategy_analyst, self.market_intel, self.data_eng]
-        validation_agents = [self.strategy_analyst, self.risk_mgmt, self.perf_analyst]
-        consensus_agents = all_agents[:7]  # First 7 agents
-
-        self.strategy_swarm = StrategyGenerationSwarm(strategy_agents)
-        self.validation_swarm = ValidationSwarm(validation_agents)
-        self.consensus_swarm = ConsensusSwarm(consensus_agents)
-
-        # AI Backtest Orchestrator
-        self.backtest_orchestrator = AIBacktestOrchestrator(
-            strategy_agents, validation_agents
-        )
-
-        logger.info("Autonomous system initialized")
-
-    async def start(self):
-        """Start all components."""
-        logger.info("Starting autonomous system...")
-
-        # Start request orchestrator
-        self.orchestrator.start()
-
-        # Start all agents
-        tasks = []
-        for agent in agent_registry.get_all():
-            tasks.append(asyncio.create_task(agent.start()))
-
-        # Start monitoring
-        tasks.append(asyncio.create_task(self._monitoring_loop()))
-
-        # Start connectivity auditing
-        tasks.append(asyncio.create_task(self.connectivity_auditor.run_continuous()))
-
-        # Start backtesting cycles
-        tasks.append(asyncio.create_task(self.backtest_orchestrator.run_continuous()))
-
-        logger.info("Autonomous system started")
-
-        # Wait for all tasks
-        await asyncio.gather(*tasks)
-
-    async def _monitoring_loop(self):
-        """Continuous monitoring loop."""
-        while True:
-            try:
-                # Collect metrics
-                self.monitoring.collect_system_metrics()
-                self.monitoring.collect_application_metrics()
-
-                # Detect anomalies
-                anomalies = self.anomaly_detector.detect_anomalies()
-
-                # Remediate anomalies
-                for anomaly in anomalies:
-                    self.auto_remediation.remediate(anomaly)
-
-                await asyncio.sleep(60)  # Check every minute
-
-            except Exception as e:
-                logger.error(f"Monitoring error: {e}")
-                await asyncio.sleep(10)
-
-    async def stop(self):
-        """Stop all components."""
-        logger.info("Stopping autonomous system...")
-
-        # Stop agents
-        for agent in agent_registry.get_all():
-            await agent.stop()
-
-        # Stop orchestrator
-        self.orchestrator.stop()
-
-        logger.info("Autonomous system stopped")
+    async def stop(self) -> None:
+        self.status = "STOPPED"
 
 
-async def main():
-    """Main entry point."""
+async def main() -> int:
     system = AutonomousSystem()
-
-    # Handle shutdown signals
-    def signal_handler(sig, frame):
-        logger.info("Shutdown signal received")
-        asyncio.create_task(system.stop())
-        sys.exit(0)
-
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-
-    try:
-        await system.start()
-    except KeyboardInterrupt:
-        logger.info("Keyboard interrupt received")
-        await system.stop()
+    output = Path(
+        os.getenv("AUTONOMOUS_BLOCK_RECEIPT", "reports/autonomous_blocked.json")
+    )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    receipt = system.receipt()
+    output.write_text(json.dumps(receipt, indent=2, sort_keys=True), encoding="utf-8")
+    print(json.dumps(receipt, indent=2, sort_keys=True))
+    return 2
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    raise SystemExit(asyncio.run(main()))
